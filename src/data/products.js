@@ -1,0 +1,138 @@
+export const brands = ["Nike", "Adidas", "Jordan", "New Balance", "Puma", "Converse"];
+export const categories = ["Running", "Basketball", "Lifestyle", "Training", "Skateboarding"];
+export const sizeOptions = [36, 37, 38, 39, 40, 41, 42, 43, 44, 45];
+
+export const products = [
+  {
+    id: "1",
+    name: "Air Max 90",
+    brand: "Nike",
+    price: 3200000,
+    originalPrice: 3800000,
+    images: [
+      "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=600",
+      "https://images.unsplash.com/photo-1607522370275-f14206abe5d3?w=600",
+    ],
+    sizes: [39, 40, 41, 42, 43, 44],
+    category: "Lifestyle",
+    description: "Giày Nike Air Max 90 với đệm Air huyền thoại, mang đến sự thoải mái tối đa cho mọi hoạt động hàng ngày.",
+    rating: 4.8,
+    reviews: 234,
+    isSale: true,
+  },
+  {
+    id: "2",
+    name: "Ultraboost 22",
+    brand: "Adidas",
+    price: 4500000,
+    images: [
+      "https://images.unsplash.com/photo-1608231387042-66d1773070a5?w=600",
+      "https://images.unsplash.com/photo-1606107557195-0e29a4b5b4aa?w=600",
+    ],
+    sizes: [38, 39, 40, 41, 42, 43, 44, 45],
+    category: "Running",
+    description: "Adidas Ultraboost 22 với công nghệ Boost hoàn trả năng lượng, lý tưởng cho chạy bộ và tập luyện.",
+    rating: 4.7,
+    reviews: 189,
+    isNew: true,
+  },
+  {
+    id: "3",
+    name: "Air Jordan 1 Retro High",
+    brand: "Jordan",
+    price: 5200000,
+    images: [
+      "https://images.unsplash.com/photo-1597045566677-8cf032ed6634?w=600",
+      "https://images.unsplash.com/photo-1585386959984-a4155224a1ad?w=600",
+    ],
+    sizes: [40, 41, 42, 43, 44],
+    category: "Basketball",
+    description: "Air Jordan 1 Retro High - biểu tượng bất hủ của văn hóa sneaker, phong cách vượt thời gian.",
+    rating: 4.9,
+    reviews: 412,
+    isNew: true,
+  },
+  {
+    id: "4",
+    name: "574 Classic",
+    brand: "New Balance",
+    price: 2800000,
+    originalPrice: 3200000,
+    images: [
+      "https://images.unsplash.com/photo-1539185441755-769473a23570?w=600",
+      "https://images.unsplash.com/photo-1551107696-a4b0c5a0d9a2?w=600",
+    ],
+    sizes: [37, 38, 39, 40, 41, 42, 43],
+    category: "Lifestyle",
+    description: "New Balance 574 Classic - sự kết hợp hoàn hảo giữa phong cách retro và comfort hiện đại.",
+    rating: 4.5,
+    reviews: 156,
+    isSale: true,
+  },
+  {
+    id: "5",
+    name: "RS-X Reinvention",
+    brand: "Puma",
+    price: 2900000,
+    images: [
+      "https://images.unsplash.com/photo-1605348532760-6753d2c43329?w=600",
+      "https://images.unsplash.com/photo-1600185365926-3a2ce3cdb9eb?w=600",
+    ],
+    sizes: [39, 40, 41, 42, 43, 44],
+    category: "Lifestyle",
+    description: "Puma RS-X Reinvention với thiết kế chunky trend, phối màu táo bạo, đế EVA êm ái.",
+    rating: 4.3,
+    reviews: 98,
+  },
+  {
+    id: "6",
+    name: "Chuck Taylor All Star",
+    brand: "Converse",
+    price: 1500000,
+    images: [
+      "https://images.unsplash.com/photo-1494496195158-c3becb4f2475?w=600",
+      "https://images.unsplash.com/photo-1463100099107-aa0980c362e6?w=600",
+    ],
+    sizes: [36, 37, 38, 39, 40, 41, 42, 43, 44, 45],
+    category: "Lifestyle",
+    description: "Converse Chuck Taylor All Star - đôi giày canvas kinh điển, biểu tượng phong cách từ 1917.",
+    rating: 4.6,
+    reviews: 567,
+  },
+  {
+    id: "7",
+    name: "Air Force 1 '07",
+    brand: "Nike",
+    price: 2700000,
+    images: [
+      "https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?w=600",
+      "https://images.unsplash.com/photo-1600269452121-4f2416e55c28?w=600",
+    ],
+    sizes: [38, 39, 40, 41, 42, 43, 44, 45],
+    category: "Lifestyle",
+    description: "Nike Air Force 1 '07 - đôi giày huyền thoại với thiết kế trắng tinh khiết, phù hợp mọi outfit.",
+    rating: 4.8,
+    reviews: 789,
+  },
+  {
+    id: "8",
+    name: "Zoom Pegasus 40",
+    brand: "Nike",
+    price: 3500000,
+    originalPrice: 4000000,
+    images: [
+      "https://images.unsplash.com/photo-1491553895911-0055eca6402d?w=600",
+      "https://images.unsplash.com/photo-1460353581641-37baddab0fa2?w=600",
+    ],
+    sizes: [39, 40, 41, 42, 43, 44],
+    category: "Running",
+    description: "Nike Zoom Pegasus 40 - đôi giày chạy bộ đa năng với đệm Zoom Air phản hồi nhanh.",
+    rating: 4.6,
+    reviews: 321,
+    isSale: true,
+  },
+];
+
+export const formatPrice = (price) => {
+  return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(price);
+};
