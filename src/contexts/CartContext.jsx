@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
-import { useAuth } from "./AuthContext";
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import cartApi from "@/api/cart.api";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
 const CartContext = createContext(undefined);
@@ -8,108 +8,172 @@ const CartContext = createContext(undefined);
 export const CartProvider = ({ children }) => {
   const { isAuthenticated } = useAuth();
   const [items, setItems] = useState([]);
-  const [totalItems, setTotalItems] = useState(0);
-  const [totalPrice, setTotalPrice] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
 
-  // Lấy giỏ hàng từ API
-  const fetchCart = async () => {
-    if (!isAuthenticated) {
-      setItems([]);
-      setTotalItems(0);
-      setTotalPrice(0);
-      return;
-    }
-    
-    try {
-      setIsLoading(true);
-      const res = await cartApi.getCart();
-      if (res && res.success) {
-        // Map backend product_id (populated object) back to 'product' field so UI components don't break
-        const mappedItems = (res.items || []).map(item => ({
-          ...item,
-          product: {
-            ...item.product_id,
-            id: item.product_id._id || item.product_id.id,
-          }
-        }));
-        setItems(mappedItems);
-        setTotalItems(res.total_items || 0);
-        setTotalPrice(res.total_price || 0);
-      }
-    } catch (error) {
-      console.error("Failed to fetch cart:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
+  // 1. Khởi tạo giỏ hàng ban đầu (từ LocalStorage cho khách)
   useEffect(() => {
-    fetchCart();
+    if (!isAuthenticated) {
+      const savedCart = localStorage.getItem("guest_cart");
+      try {
+        if (savedCart) {
+          const parsed = JSON.parse(savedCart);
+          setItems(Array.isArray(parsed) ? parsed : []);
+        }
+      } catch (e) {
+        console.error("Lỗi parse giỏ hàng tạm thời:", e);
+        setItems([]);
+      }
+    }
+    setIsInitialized(true);
   }, [isAuthenticated]);
 
-  const addToCart = async (product, size, quantity = 1) => {
-    if (!isAuthenticated) {
-      toast.error("Vui lòng đăng nhập để thêm vào giỏ hàng");
-      return;
-    }
-
+  // 2. Lấy giỏ hàng từ server nếu đã đăng nhập
+  const fetchCart = useCallback(async () => {
+    if (!isAuthenticated) return;
+    setIsLoading(true);
     try {
-      setIsLoading(true);
-      await cartApi.addToCart({
-        product_id: product.id || product._id,
-        size,
-        quantity
-      });
-      // Refresh cart sau khi thêm thành công
-      await fetchCart();
-      toast.success("Đã thêm vào giỏ hàng");
+      const response = await cartApi.get();
+      const cartData = response.data || response;
+      
+      if (cartData && Array.isArray(cartData.items)) {
+        const formattedItems = cartData.items.map(item => {
+          // Bảo vệ nếu product_id không tồn tại hoặc chưa được populate
+          const productInfo = item.product_id || {};
+          return {
+            product: {
+              ...productInfo,
+              id: productInfo._id || productInfo.id
+            },
+            size: item.size,
+            quantity: item.quantity
+          };
+        });
+        setItems(formattedItems);
+      } else {
+        setItems([]);
+      }
     } catch (error) {
-      toast.error(error?.response?.data?.message || "Lỗi khi thêm vào giỏ hàng");
-      console.error(error);
+      console.error("Lỗi lấy giỏ hàng từ server:", error);
+      if (error.response?.status === 401) setItems([]);
     } finally {
       setIsLoading(false);
+    }
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (isAuthenticated && isInitialized) {
+      fetchCart();
+    }
+  }, [isAuthenticated, isInitialized, fetchCart]);
+
+  // 3. Lưu guest cart vào localStorage khi thay đổi (chỉ khi chưa đăng nhập)
+  useEffect(() => {
+    if (isInitialized && !isAuthenticated) {
+      localStorage.setItem("guest_cart", JSON.stringify(items));
+    }
+  }, [items, isAuthenticated, isInitialized]);
+
+  // 4. CHỨC NĂNG CHÍNH: THÊM VÀO GIỎ HÀNG
+  const addToCart = async (product, size, quantity = 1) => {
+    if (!product) return;
+    const productId = product._id || product.id;
+
+    if (isAuthenticated) {
+      try {
+        setIsLoading(true);
+        await cartApi.add({
+          product_id: productId,
+          size: Number(size),
+          quantity: Number(quantity)
+        });
+        toast.success("Đã thêm vào giỏ hàng trực tuyến!");
+        await fetchCart();
+      } catch (error) {
+        console.error("Lỗi API Thêm vào giỏ hàng:", error);
+        toast.error(error.response?.data?.message || "Không thể thêm vào giỏ hàng.");
+      } finally {
+        setIsLoading(false);
+      }
+    } else {
+      // Logic cho khách (Lưu Local)
+      setItems((prev) => {
+        const existingIndex = prev.findIndex(
+          (i) => (i.product._id || i.product.id) === productId && i.size === size
+        );
+
+        if (existingIndex > -1) {
+          const newItems = [...prev];
+          newItems[existingIndex] = {
+            ...newItems[existingIndex],
+            quantity: newItems[existingIndex].quantity + quantity
+          };
+          return newItems;
+        }
+        return [...prev, { product, size, quantity }];
+      });
+      toast.success("Đã thêm vào giỏ hàng tạm thời!");
     }
   };
 
   const removeFromCart = async (productId, size) => {
-    if (!isAuthenticated) return;
-    try {
-      setIsLoading(true);
-      await cartApi.removeFromCart({ product_id: productId, size });
-      await fetchCart();
-    } catch (error) {
-      toast.error(error?.response?.data?.message || "Lỗi khi xoá sản phẩm");
-    } finally {
-      setIsLoading(false);
+    if (isAuthenticated) {
+      try {
+        setIsLoading(true);
+        await cartApi.remove({ product_id: productId, size: Number(size) });
+        await fetchCart();
+      } catch (error) {
+        toast.error("Lỗi khi xóa sản phẩm.");
+      } finally {
+        setIsLoading(false);
+      }
+    } else {
+      setItems((prev) => prev.filter((i) => !((i.product._id || i.product.id) === productId && i.size === size)));
     }
   };
 
   const updateQuantity = async (productId, size, quantity) => {
-    if (!isAuthenticated) return;
     if (quantity <= 0) return removeFromCart(productId, size);
-    
-    try {
-      setIsLoading(true);
-      await cartApi.updateCart({ product_id: productId, size, quantity });
-      await fetchCart();
-    } catch (error) {
-      toast.error(error?.response?.data?.message || "Lỗi cập nhật số lượng");
-    } finally {
-      setIsLoading(false);
+
+    if (isAuthenticated) {
+      try {
+        setIsLoading(true);
+        await cartApi.update({ product_id: productId, size: Number(size), quantity: Number(quantity) });
+        await fetchCart();
+      } catch (error) {
+        toast.error("Lỗi khi cập nhật số lượng.");
+      } finally {
+        setIsLoading(false);
+      }
+    } else {
+      setItems((prev) =>
+        prev.map((i) =>
+          (i.product._id || i.product.id) === productId && i.size === size ? { ...i, quantity } : i
+        )
+      );
     }
   };
 
   const clearCart = () => {
-    // Để xoá giỏ hàng hiện tại (thường gọi sau khi thanh toán thành công)
     setItems([]);
-    setTotalItems(0);
-    setTotalPrice(0);
-    // Có thể không cần gọi API clearCart vì Checkout backend đã tự clear
+    if (!isAuthenticated) localStorage.removeItem("guest_cart");
   };
 
+  // Tính toán an toàn
+  const totalItems = Array.isArray(items) ? items.reduce((sum, i) => sum + (i.quantity || 0), 0) : 0;
+  const totalPrice = Array.isArray(items) ? items.reduce((sum, i) => sum + (i.product?.price || 0) * (i.quantity || 0), 0) : 0;
+
   return (
-    <CartContext.Provider value={{ items, addToCart, removeFromCart, updateQuantity, clearCart, totalItems, totalPrice, isLoading }}>
+    <CartContext.Provider value={{ 
+      items: Array.isArray(items) ? items : [], 
+      addToCart, 
+      removeFromCart, 
+      updateQuantity, 
+      clearCart, 
+      totalItems, 
+      totalPrice, 
+      isLoading 
+    }}>
       {children}
     </CartContext.Provider>
   );

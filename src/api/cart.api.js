@@ -1,24 +1,36 @@
 import axiosClient from "./axiosClient";
 
 const cartApi = {
-  getCart: () => {
-    return axiosClient.get("/user/cart");
+  /**
+   * Lấy danh sách giỏ hàng hiện tại của người dùng
+   */
+  get: () => {
+    return axiosClient.get("/cart");
   },
 
-  addToCart: (data) => {
-    // data: { product_id, size, quantity }
-    return axiosClient.post("/user/cart/add", data);
+  /**
+   * Thêm sản phẩm vào giỏ hàng
+   * @param {Object} payload { product_id, size, quantity }
+   */
+  add: (payload) => {
+    return axiosClient.post("/cart/add", payload);
   },
 
-  updateCart: (data) => {
-    // data: { product_id, size, quantity }
-    return axiosClient.put("/user/cart/update", data);
+  /**
+   * Cập nhật số lượng sản phẩm trong giỏ hàng
+   * @param {Object} payload { product_id, size, quantity }
+   */
+  update: (payload) => {
+    return axiosClient.put("/cart/update", payload);
   },
 
-  removeFromCart: (data) => {
-    // data: { product_id, size }
-    return axiosClient.delete("/user/cart/remove", { data });
-  },
+  /**
+   * Xóa sản phẩm khỏi giỏ hàng
+   * @param {Object} payload { product_id, size }
+   */
+  remove: (payload) => {
+    return axiosClient.delete("/cart/remove", { data: payload });
+  }
 };
 
 export default cartApi;
