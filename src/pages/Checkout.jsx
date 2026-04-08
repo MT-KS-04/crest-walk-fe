@@ -6,11 +6,13 @@ import { Input } from "@/components/ui/input";
 import { useCart } from "@/contexts/CartContext";
 import { formatPrice } from "@/data/products";
 import { toast } from "sonner";
+import userOrderApi from "@/api/userOrder.api";
 
 const Checkout = () => {
   const { items, totalPrice, clearCart } = useCart();
   const navigate = useNavigate();
   const [step, setStep] = useState("shipping");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const shippingFee = totalPrice >= 1000000 ? 0 : 30000;
 
   const [shippingForm, setShippingForm] = useState({
@@ -52,11 +54,42 @@ const Checkout = () => {
     setStep("confirm");
   };
 
-  const handlePlaceOrder = () => {
-    const orderId = "DH" + Date.now().toString().slice(-8);
-    toast.success(`Đặt hàng thành công! Mã đơn: ${orderId}`);
-    clearCart();
-    navigate(`/order-tracking?id=${orderId}`);
+  const handlePlaceOrder = async () => {
+    setIsSubmitting(true);
+    try {
+      // Build full address string
+      const fullAddress = [
+        shippingForm.address,
+        shippingForm.ward,
+        shippingForm.district,
+        shippingForm.city
+      ].filter(Boolean).join(", ");
+
+      const payload = {
+        address: fullAddress,
+        phone: shippingForm.phone,
+        payment_method: paymentMethod === 'cod' ? 'COD' : 'Online'
+      };
+
+      const res = await userOrderApi.checkout(payload);
+      
+      if (res && res.success) {
+        clearCart(); // Clean frontend context since backend is cleared
+        
+        if (res.paymentUrl) {
+          // Redirect to VNPAY
+          window.location.href = res.paymentUrl;
+        } else {
+          toast.success("Đặt hàng thành công!");
+          navigate(`/order-tracking?id=${res.data._id || ''}`);
+        }
+      }
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Lỗi khi đặt hàng");
+      console.error(error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const steps = [
@@ -196,8 +229,11 @@ const Checkout = () => {
                   <button onClick={() => setStep("payment")} className="flex-1 rounded-full border border-border py-3 text-sm text-muted-foreground hover:text-foreground transition-colors">
                     Quay lại
                   </button>
-                  <button onClick={handlePlaceOrder} className="flex-1 rounded-full bg-primary py-4 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-all">
-                    Đặt hàng
+                  <button 
+                    onClick={handlePlaceOrder} 
+                    disabled={isSubmitting}
+                    className="flex-1 rounded-full bg-primary py-4 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-all disabled:opacity-75 disabled:cursor-not-allowed">
+                    {isSubmitting ? 'Đang xử lý...' : 'Đặt hàng'}
                   </button>
                 </div>
               </div>

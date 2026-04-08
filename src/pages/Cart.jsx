@@ -5,7 +5,7 @@ import { useCart } from "@/contexts/CartContext";
 import { formatPrice } from "@/data/products";
 
 const Cart = () => {
-  const { items, removeFromCart, updateQuantity, totalPrice, clearCart } = useCart();
+  const { items, removeFromCart, updateQuantity, totalPrice, clearCart, isLoading } = useCart();
 
   if (items.length === 0) {
     return (
@@ -62,14 +62,16 @@ const Cart = () => {
                     <div className="inline-flex items-center rounded-lg border border-border">
                       <button
                         onClick={() => updateQuantity(item.product.id, item.size, item.quantity - 1)}
-                        className="flex h-8 w-8 items-center justify-center text-muted-foreground hover:text-foreground"
+                        disabled={isLoading}
+                        className="flex h-8 w-8 items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-50"
                       >
                         <Minus className="h-3 w-3" />
                       </button>
                       <span className="flex h-8 w-8 items-center justify-center text-xs font-semibold">{item.quantity}</span>
                       <button
                         onClick={() => updateQuantity(item.product.id, item.size, item.quantity + 1)}
-                        className="flex h-8 w-8 items-center justify-center text-muted-foreground hover:text-foreground"
+                        disabled={isLoading}
+                        className="flex h-8 w-8 items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-50"
                       >
                         <Plus className="h-3 w-3" />
                       </button>
@@ -102,9 +104,11 @@ const Cart = () => {
                 </span>
               </div>
             </div>
-            <button className="w-full rounded-full bg-gradient-fire py-4 text-sm font-semibold text-primary-foreground hover:shadow-glow transition-all">
+            <Link 
+              to="/checkout"
+              className="w-full flex justify-center rounded-full bg-gradient-fire py-4 text-sm font-semibold text-primary-foreground hover:shadow-glow transition-all">
               Đặt hàng
-            </button>
+            </Link>
             <button
               onClick={clearCart}
               className="w-full mt-3 rounded-full border border-border py-3 text-sm text-muted-foreground hover:text-foreground transition-colors"
