@@ -36,51 +36,57 @@ const Cart = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-4">
-            {items.map((item) => (
-              <div
-                key={`${item.product.id}-${item.size}`}
-                className="flex gap-4 rounded-xl border border-border bg-card p-4"
-              >
-                <Link to={`/product/${item.product.id}`} className="h-24 w-24 flex-shrink-0 overflow-hidden rounded-lg">
-                  <img src={item.product.images[0]} alt={item.product.name} className="h-full w-full object-cover" />
-                </Link>
-                <div className="flex-1 min-w-0">
-                  <div className="flex justify-between">
-                    <div>
-                      <p className="text-xs text-muted-foreground uppercase">{item.product.brand}</p>
-                      <h3 className="font-heading text-sm font-semibold truncate">{item.product.name}</h3>
-                      <p className="text-xs text-muted-foreground">Size: {item.size}</p>
-                    </div>
-                    <button
-                      onClick={() => removeFromCart(item.product.id, item.size)}
-                      className="text-muted-foreground hover:text-destructive transition-colors"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                  <div className="flex items-center justify-between mt-3">
-                    <div className="inline-flex items-center rounded-lg border border-border">
+            {items.map((item) => {
+              const productId = item.product._id || item.product.id;
+              const brandName = item.product.brand_id?.name || item.product.brand || "Thương hiệu";
+              const productImage = item.product.images?.[0] || "";
+
+              return (
+                <div
+                  key={`${productId}-${item.size}`}
+                  className="flex gap-4 rounded-xl border border-border bg-card p-4"
+                >
+                  <Link to={`/product/${productId}`} className="h-24 w-24 flex-shrink-0 overflow-hidden rounded-lg">
+                    <img src={productImage} alt={item.product.name} className="h-full w-full object-cover" />
+                  </Link>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between">
+                      <div>
+                        <p className="text-xs text-muted-foreground uppercase">{brandName}</p>
+                        <h3 className="font-heading text-sm font-semibold truncate">{item.product.name}</h3>
+                        <p className="text-xs text-muted-foreground">Size: {item.size}</p>
+                      </div>
                       <button
-                        onClick={() => updateQuantity(item.product.id, item.size, item.quantity - 1)}
-                        className="flex h-8 w-8 items-center justify-center text-muted-foreground hover:text-foreground"
+                        onClick={() => removeFromCart(productId, item.size)}
+                        className="text-muted-foreground hover:text-destructive transition-colors"
                       >
-                        <Minus className="h-3 w-3" />
-                      </button>
-                      <span className="flex h-8 w-8 items-center justify-center text-xs font-semibold">{item.quantity}</span>
-                      <button
-                        onClick={() => updateQuantity(item.product.id, item.size, item.quantity + 1)}
-                        className="flex h-8 w-8 items-center justify-center text-muted-foreground hover:text-foreground"
-                      >
-                        <Plus className="h-3 w-3" />
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
-                    <span className="text-sm font-semibold text-primary">
-                      {formatPrice(item.product.price * item.quantity)}
-                    </span>
+                    <div className="flex items-center justify-between mt-3">
+                      <div className="inline-flex items-center rounded-lg border border-border">
+                        <button
+                          onClick={() => updateQuantity(productId, item.size, item.quantity - 1)}
+                          className="flex h-8 w-8 items-center justify-center text-muted-foreground hover:text-foreground"
+                        >
+                          <Minus className="h-3 w-3" />
+                        </button>
+                        <span className="flex h-8 w-8 items-center justify-center text-xs font-semibold">{item.quantity}</span>
+                        <button
+                          onClick={() => updateQuantity(productId, item.size, item.quantity + 1)}
+                          className="flex h-8 w-8 items-center justify-center text-muted-foreground hover:text-foreground"
+                        >
+                          <Plus className="h-3 w-3" />
+                        </button>
+                      </div>
+                      <span className="text-sm font-semibold text-primary">
+                        {formatPrice((item.product.price || 0) * item.quantity)}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Summary */}

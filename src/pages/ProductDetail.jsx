@@ -25,16 +25,23 @@ const ProductDetail = () => {
       setIsLoading(true);
       try {
         const response = await productsApi.getById(id);
-        const data = response.data || response;
+        // Backend trả về { product: { ... } }
+        const data = response.product || response.data || response;
         setProduct(data);
 
-        // Fetch related products
-        if (data?.category_id?._id || data?.category) {
-          const cat = data.category_id?._id || data.category;
-          const relatedRes = await productsApi.list({ category: cat, limit: 5 });
-          const relatedData = relatedRes.products || relatedRes.data || relatedRes;
-          if (Array.isArray(relatedData)) {
-            setRelatedProducts(relatedData.filter(p => (p._id || p.id) !== id).slice(0, 4));
+        // Fetch related products - Lấy theo category_id của sản phẩm hiện tại
+        const catId = data?.category_id?._id || data?.category_id;
+        if (catId) {
+          try {
+            // Sử dụng API filter để lấy sản phẩm cùng danh mục
+            const relatedRes = await productsApi.filter({ category: catId, limit: 5 });
+            const relatedData = relatedRes.products || relatedRes.data || [];
+            if (Array.isArray(relatedData)) {
+              // Loại bỏ sản phẩm hiện tại khỏi danh sách liên quan
+              setRelatedProducts(relatedData.filter(p => (p._id || p.id) !== id).slice(0, 4));
+            }
+          } catch (relErr) {
+            console.error("Fetch related products error:", relErr);
           }
         }
       } catch (error) {
@@ -84,10 +91,12 @@ const ProductDetail = () => {
     await addToCart(product, selectedSize, quantity);
   };
 
-  const brandName = product.brand_id?.name || product.brand;
-  const originalPrice = product.original_price || product.originalPrice;
-  const sizes = Array.isArray(product.sizes) 
-    ? (typeof product.sizes[0] === 'object' ? product.sizes.map(s => s.size) : product.sizes)
+  const brandName = product?.brand_id?.name || product?.brand || "Thương hiệu";
+  const originalPrice = product?.original_price || product?.originalPrice;
+  const sizes = Array.isArray(product?.sizes) 
+    ? (typeof product.sizes[0] === 'object' 
+        ? product.sizes.filter(s => s.quantity > 0).map(s => s.size) 
+        : product.sizes)
     : [];
 
   return (
@@ -106,13 +115,13 @@ const ProductDetail = () => {
           >
             <div className="aspect-square overflow-hidden rounded-2xl bg-card mb-4 border border-border">
               <img
-                src={product.images[selectedImage]}
-                alt={product.name}
+                src={product?.images?.[selectedImage] || ""}
+                alt={product?.name || "Product"}
                 className="h-full w-full object-cover"
               />
             </div>
             <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
-              {product.images.map((img, i) => (
+              {(product?.images || []).map((img, i) => (
                 <button
                   key={i}
                   onClick={() => setSelectedImage(i)}
