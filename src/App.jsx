@@ -21,6 +21,11 @@ import AdminBestsellers from "./pages/admin/AdminBestsellers.jsx";
 import AdminReviews from "./pages/admin/AdminReviews.jsx";
 import AdminBanners from "./pages/admin/AdminBanners.jsx";
 import AdminBrands from "./pages/admin/AdminBrands.jsx";
+import Auth from "./pages/Auth.jsx";
+import Checkout from "./pages/Checkout.jsx";
+import Profile from "./pages/Profile.jsx";
+import OrderTracking from "./pages/OrderTracking.jsx";
+
 
 const queryClient = new QueryClient();
 
@@ -49,7 +54,13 @@ const App = () => (
             <Route path="/admin/bestsellers" element={<AdminBestsellers />} />
             <Route path="/admin/reviews" element={<AdminReviews />} />
             <Route path="/admin/banners" element={<AdminBanners />} />
+            {/* New Routes */}
+            <Route path="/auth" element={<Auth />} />
+            <Route path="/checkout" element={<Checkout />} />
+            <Route path="/profile" element={<Profile />} />
+            <Route path="/order-tracking" element={<OrderTracking />} />
             <Route path="*" element={<NotFound />} />
+
           </Routes>
         </BrowserRouter>
       </CartProvider>
