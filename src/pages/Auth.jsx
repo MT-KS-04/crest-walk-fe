@@ -33,9 +33,15 @@ const Auth = () => {
     }
 
     try {
-      await handleLogin(loginForm.email, loginForm.password);
+      const result = await handleLogin(loginForm.email, loginForm.password);
       toast.success("Đăng nhập thành công!");
-      navigate("/");
+      
+      const role = result?.data?.user?.role;
+      if (role === "admin") {
+        navigate("/admin");
+      } else {
+        navigate("/");
+      }
     } catch (error) {
       const message =
         error?.response?.data?.message ||

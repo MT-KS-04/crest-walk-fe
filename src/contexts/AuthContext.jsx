@@ -5,16 +5,25 @@ import axiosClient, { setAccessToken } from "@/api/axiosClient";
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [user, setUser] = useState(() => {
+    const savedUser = localStorage.getItem('user');
+    return savedUser ? JSON.parse(savedUser) : null;
+  });
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return !!localStorage.getItem('accessToken');
+  });
+  const [isLoading, setIsLoading] = useState(false);
 
-  const applyToken = (token) => {
+  const applyToken = (token, userData) => {
     setAccessToken(token || null);
     if (token) {
       axiosClient.defaults.headers.Authorization = `Bearer ${token}`;
+      localStorage.setItem('accessToken', token);
+      if (userData) localStorage.setItem('user', JSON.stringify(userData));
     } else {
       delete axiosClient.defaults.headers.Authorization;
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('user');
     }
   };
 
@@ -25,7 +34,7 @@ export const AuthProvider = ({ children }) => {
       const { accessToken, user: userData } = data || {};
 
       if (accessToken) {
-        applyToken(accessToken);
+        applyToken(accessToken, userData);
       }
 
       if (userData) {
@@ -58,7 +67,7 @@ export const AuthProvider = ({ children }) => {
       const { accessToken, user: userData } = data || {};
 
       if (accessToken) {
-        applyToken(accessToken);
+        applyToken(accessToken, userData);
       }
 
       if (userData) {
@@ -87,31 +96,10 @@ export const AuthProvider = ({ children }) => {
   };
 
   useEffect(() => {
-    const checkSession = async () => {
-      try {
-        setIsLoading(true);
-        const data = await authApi.refreshToken();
-        const { accessToken, user: userData } = data || {};
-
-        if (accessToken) {
-          applyToken(accessToken);
-        }
-
-        if (userData) {
-          setUser(userData);
-        }
-
-        setIsAuthenticated(Boolean(accessToken && userData));
-      } catch {
-        applyToken(null);
-        setUser(null);
-        setIsAuthenticated(false);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    checkSession();
+    const token = localStorage.getItem('accessToken');
+    if (token) {
+      applyToken(token, user);
+    }
   }, []);
 
   const value = {
