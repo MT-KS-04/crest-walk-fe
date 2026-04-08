@@ -3,8 +3,24 @@ import Layout from "@/components/Layout";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatPrice } from "@/data/products";
 import {
-  User, Package, History, Shield, Heart, Camera, Save, Eye, EyeOff,
-  MapPin, Phone, Mail, Calendar, ChevronRight, Star, Trash2, Settings, LogOut
+  User,
+  Package,
+  History,
+  Shield,
+  Heart,
+  Camera,
+  Save,
+  Eye,
+  EyeOff,
+  MapPin,
+  Phone,
+  Mail,
+  Calendar,
+  ChevronRight,
+  Star,
+  Trash2,
+  Settings,
+  LogOut,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useSearchParams } from "react-router-dom";
@@ -50,7 +66,11 @@ const Profile = () => {
   };
 
   const handleDeleteAccount = () => {
-    if (window.confirm("Bạn có chắc chắn muốn xóa tài khoản? Hành động này không thể hoàn tác.")) {
+    if (
+      window.confirm(
+        "Bạn có chắc chắn muốn xóa tài khoản? Hành động này không thể hoàn tác.",
+      )
+    ) {
       toast.error("Đã gửi yêu cầu xóa tài khoản!");
     }
   };
@@ -70,7 +90,11 @@ const Profile = () => {
             <div className="relative group">
               <div className="h-24 w-24 rounded-full border-4 border-background shadow-xl overflow-hidden bg-muted flex items-center justify-center">
                 {user?.avatar ? (
-                  <img src={user.avatar} alt={user.full_name} className="h-full w-full object-cover" />
+                  <img
+                    src={user.avatar}
+                    alt={user.full_name}
+                    className="h-full w-full object-cover"
+                  />
                 ) : (
                   <User className="h-12 w-12 text-muted-foreground" />
                 )}
@@ -80,7 +104,9 @@ const Profile = () => {
               </button>
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-foreground mb-1">{user?.full_name || "Người dùng"}</h1>
+              <h1 className="text-3xl font-bold text-foreground mb-1">
+                {user?.full_name || "Người dùng"}
+              </h1>
               <p className="text-muted-foreground text-sm flex items-center gap-1.5">
                 Thành viên từ {formatDate(user?.createdAt)}
               </p>
@@ -88,14 +114,14 @@ const Profile = () => {
           </div>
 
           <div className="flex items-center bg-muted/50 p-1.5 rounded-xl border border-border">
-            <button 
+            <button
               onClick={() => setSearchParams({ tab: "profile" })}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === "profile" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
             >
               <User className="h-4 w-4" />
               Hồ sơ
             </button>
-            <button 
+            <button
               onClick={() => setSearchParams({ tab: "settings" })}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === "settings" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
             >
@@ -113,9 +139,11 @@ const Profile = () => {
                 <h2 className="text-2xl font-bold mb-8">Thông tin cá nhân</h2>
                 <form onSubmit={handleUpdateProfile} className="space-y-6">
                   <div className="space-y-2">
-                    <label className="text-sm font-semibold text-foreground/80 ml-1">Họ và tên</label>
-                    <input 
-                      type="text" 
+                    <label className="text-sm font-semibold text-foreground/80 ml-1">
+                      Họ và tên
+                    </label>
+                    <input
+                      type="text"
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
                       placeholder="Nhập họ và tên"
@@ -124,9 +152,11 @@ const Profile = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-sm font-semibold text-foreground/80 ml-1">Email</label>
-                    <input 
-                      type="email" 
+                    <label className="text-sm font-semibold text-foreground/80 ml-1">
+                      Email
+                    </label>
+                    <input
+                      type="email"
                       value={email}
                       disabled
                       placeholder="email@example.com"
@@ -135,9 +165,11 @@ const Profile = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-sm font-semibold text-foreground/80 ml-1">Số điện thoại</label>
-                    <input 
-                      type="tel" 
+                    <label className="text-sm font-semibold text-foreground/80 ml-1">
+                      Số điện thoại
+                    </label>
+                    <input
+                      type="tel"
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
                       placeholder="Nhập số điện thoại"
@@ -146,9 +178,11 @@ const Profile = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-sm font-semibold text-foreground/80 ml-1">Địa chỉ</label>
-                    <input 
-                      type="text" 
+                    <label className="text-sm font-semibold text-foreground/80 ml-1">
+                      Địa chỉ
+                    </label>
+                    <input
+                      type="text"
                       value={address}
                       onChange={(e) => setAddress(e.target.value)}
                       placeholder="Nhập địa chỉ của bạn"
@@ -156,7 +190,7 @@ const Profile = () => {
                     />
                   </div>
 
-                  <button 
+                  <button
                     type="submit"
                     className="px-8 py-3.5 bg-[#2D8A6F] hover:bg-[#24705a] text-white rounded-2xl font-bold text-sm shadow-lg shadow-[#2D8A6F]/20 transition-all hover:-translate-y-0.5"
                   >
@@ -168,29 +202,33 @@ const Profile = () => {
 
             {activeTab === "settings" && (
               <div className="bg-card rounded-3xl border border-border p-8 shadow-sm">
-                <h2 className="text-2xl font-bold mb-8 text-[#1a1a1a]">Cài đặt tài khoản</h2>
-                
+                <h2 className="text-2xl font-bold mb-8 text-[#1a1a1a]">
+                  Cài đặt tài khoản
+                </h2>
+
                 {/* Đổi mật khẩu */}
                 <div className="mb-10">
-                  <h3 className="text-sm font-bold text-foreground mb-4">Đổi mật khẩu</h3>
+                  <h3 className="text-sm font-bold text-foreground mb-4">
+                    Đổi mật khẩu
+                  </h3>
                   <form onSubmit={handleChangePassword} className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <input 
-                        type="password" 
+                      <input
+                        type="password"
                         placeholder="Mật khẩu hiện tại"
                         value={currentPassword}
                         onChange={(e) => setCurrentPassword(e.target.value)}
                         className="w-full px-5 py-3.5 rounded-2xl border border-border bg-muted/30 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
                       />
-                      <input 
-                        type="password" 
+                      <input
+                        type="password"
                         placeholder="Mật khẩu mới"
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
                         className="w-full px-5 py-3.5 rounded-2xl border border-border bg-muted/30 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
                       />
                     </div>
-                    <button 
+                    <button
                       type="submit"
                       className="px-6 py-2.5 border border-border bg-background hover:bg-muted text-foreground rounded-xl font-bold text-xs transition-all"
                     >
@@ -203,13 +241,15 @@ const Profile = () => {
 
                 {/* Xóa tài khoản */}
                 <div className="space-y-4">
-                  <button 
+                  <button
                     onClick={handleDeleteAccount}
                     className="px-6 py-3 bg-[#E53E3E] hover:bg-[#C53030] text-white rounded-xl font-bold text-sm shadow-lg shadow-red-500/20 transition-all hover:-translate-y-0.5"
                   >
                     Xóa tài khoản
                   </button>
-                  <p className="text-xs text-muted-foreground ml-1">Hành động này không thể hoàn tác.</p>
+                  <p className="text-xs text-muted-foreground ml-1">
+                    Hành động này không thể hoàn tác.
+                  </p>
                 </div>
               </div>
             )}
