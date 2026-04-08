@@ -57,6 +57,18 @@ const OrderTracking = () => {
     }
   }, [initialId]);
 
+  useEffect(() => {
+    const paymentStatus = searchParams.get("payment_status");
+    if (paymentStatus === "success") {
+      toast.success("Thanh toán VNPAY thành công!");
+      // Clean up parameter
+      searchParams.delete("payment_status");
+    } else if (paymentStatus === "failed") {
+      toast.error("Thanh toán VNPAY thất bại hoặc đã bị hủy.");
+      searchParams.delete("payment_status");
+    }
+  }, [searchParams]);
+
   const handleSearch = (e) => {
     e.preventDefault();
     if (!orderId.trim()) return;
