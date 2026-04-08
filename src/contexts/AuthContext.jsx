@@ -9,6 +9,15 @@ export const AuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
+  const syncUserFromMe = async () => {
+    try {
+      const meData = await authApi.getMe();
+      return meData?.user || null;
+    } catch {
+      return null;
+    }
+  };
+
   const applyToken = (token) => {
     setAccessToken(token || null);
     if (token) {
@@ -24,18 +33,27 @@ export const AuthProvider = ({ children }) => {
       const data = await authApi.login(email, password);
       const { accessToken, user: userData } = data || {};
 
+      let nextUser = userData || null;
+
       if (accessToken) {
         applyToken(accessToken);
       }
 
-      if (userData) {
-        setUser(userData);
+      if (!nextUser && accessToken) {
+        nextUser = await syncUserFromMe();
       }
 
-      setIsAuthenticated(Boolean(accessToken && userData));
+      if (nextUser) {
+        setUser(nextUser);
+      } else {
+        setUser(null);
+      }
+
+      setIsAuthenticated(Boolean(accessToken && nextUser));
       return { success: true, data };
     } catch (error) {
       setIsAuthenticated(false);
+      setUser(null);
       throw error;
     } finally {
       setIsLoading(false);
@@ -57,17 +75,28 @@ export const AuthProvider = ({ children }) => {
       // Tuỳ backend, có thể trả luôn token + user hoặc chỉ user
       const { accessToken, user: userData } = data || {};
 
+      let nextUser = userData || null;
+
       if (accessToken) {
         applyToken(accessToken);
       }
 
-      if (userData) {
-        setUser(userData);
-        setIsAuthenticated(true);
+      if (!nextUser && accessToken) {
+        nextUser = await syncUserFromMe();
+      }
+
+      if (nextUser) {
+        setUser(nextUser);
+        setIsAuthenticated(Boolean(accessToken && nextUser));
+      } else {
+        setUser(null);
+        setIsAuthenticated(Boolean(accessToken));
       }
 
       return { success: true, data };
     } catch (error) {
+      setIsAuthenticated(false);
+      setUser(null);
       throw error;
     } finally {
       setIsLoading(false);
@@ -93,15 +122,23 @@ export const AuthProvider = ({ children }) => {
         const data = await authApi.refreshToken();
         const { accessToken, user: userData } = data || {};
 
+        let nextUser = userData || null;
+
         if (accessToken) {
           applyToken(accessToken);
         }
 
-        if (userData) {
-          setUser(userData);
+        if (!nextUser && accessToken) {
+          nextUser = await syncUserFromMe();
         }
 
-        setIsAuthenticated(Boolean(accessToken && userData));
+        if (nextUser) {
+          setUser(nextUser);
+        } else {
+          setUser(null);
+        }
+
+        setIsAuthenticated(Boolean(accessToken && nextUser));
       } catch {
         applyToken(null);
         setUser(null);
