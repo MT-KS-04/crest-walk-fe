@@ -1,12 +1,24 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
 import { useSearchParams } from "react-router-dom";
-import { Search, SlidersHorizontal, X } from "lucide-react";
+import { Search, SlidersHorizontal, X, ChevronLeft, ChevronRight } from "lucide-react";
 import Layout from "@/components/Layout";
 import ProductCard from "@/components/ProductCard";
 import productsApi from "@/api/products.api";
 import brandsApi from "@/api/brands.api";
 import categoriesApi from "@/api/categories.api";
 import { sizeOptions } from "@/data/products";
+import { normalizeListPagination } from "@/lib/normalizeListPagination";
+import { cn } from "@/lib/utils";
+import { buttonVariants } from "@/components/ui/button";
+
+const PAGE_SIZE = 24;
+const SEARCH_DEBOUNCE_MS = 400;
 
 const readBrandIdsFromSearch = () => {
   if (typeof window === "undefined") return [];
@@ -23,7 +35,21 @@ const readBrandIdsFromSearch = () => {
 const Products = () => {
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [search, setSearch] = useState(searchParams.get("keyword") || "");
+  const [searchInput, setSearchInput] = useState(
+    () => searchParams.get("keyword") || "",
+  );
+  const [debouncedSearch, setDebouncedSearch] = useState(
+    () => searchParams.get("keyword") || "",
+  );
+
+  useEffect(() => {
+    const t = setTimeout(
+      () => setDebouncedSearch(searchInput),
+      SEARCH_DEBOUNCE_MS,
+    );
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
   const [selectedBrandIds, setSelectedBrandIds] = useState(
     readBrandIdsFromSearch,
   );
@@ -34,10 +60,26 @@ const Products = () => {
   const [sortBy, setSortBy] = useState(searchParams.get("sortBy") || "newest");
 
   const [items, setItems] = useState([]);
+  const [pagination, setPagination] = useState({
+    total: 0,
+    page: 1,
+    limit: PAGE_SIZE,
+    totalPages: 0,
+  });
   const [isFetching, setIsFetching] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [brands, setBrands] = useState([]);
   const [categories, setCategories] = useState([]);
+
+  const pageFromUrl = useMemo(() => {
+    const raw = searchParams.get("page");
+    const p = parseInt(raw || "1", 10);
+    return Number.isFinite(p) && p >= 1 ? p : 1;
+  }, [searchParams]);
+
+  const categoryParam = searchParams.get("category") || "";
+
+  const filterSigRef = useRef(null);
 
   useEffect(() => {
     const load = async () => {
@@ -55,7 +97,6 @@ const Products = () => {
     load();
   }, []);
 
-  const categoryParam = searchParams.get("category") || "";
   useEffect(() => {
     if (!categoryParam || !categories.length) return;
     if (/^[0-9a-fA-F]{24}$/.test(categoryParam)) {
@@ -66,15 +107,68 @@ const Products = () => {
     if (match) setSelectedCategoryId(match._id);
   }, [categoryParam, categories]);
 
+  useEffect(() => {
+    const sig = JSON.stringify({
+      ds: debouncedSearch.trim(),
+      cat: categoryParam || "",
+      brands: selectedBrandIds.slice().sort().join(","),
+      size: selectedSize,
+      sort: sortBy,
+    });
+
+    const shouldResetPage =
+      filterSigRef.current !== null && filterSigRef.current !== sig;
+    filterSigRef.current = sig;
+
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams();
+        if (debouncedSearch.trim()) {
+          next.set("keyword", debouncedSearch.trim());
+        }
+
+        if (selectedCategoryId) {
+          const cat = categories.find((c) => c._id === selectedCategoryId);
+          if (cat?.name) next.set("category", cat.name);
+          else next.set("category", selectedCategoryId);
+        } else if (categoryParam) {
+          next.set("category", categoryParam);
+        }
+
+        if (selectedBrandIds.length) {
+          next.set("brands", selectedBrandIds.join(","));
+        }
+        if (selectedSize) next.set("size", selectedSize);
+        if (sortBy !== "newest") next.set("sortBy", sortBy);
+
+        if (!shouldResetPage) {
+          const p = prev.get("page");
+          if (p && parseInt(p, 10) > 1) next.set("page", p);
+        }
+        return next;
+      },
+      { replace: true },
+    );
+  }, [
+    debouncedSearch,
+    selectedCategoryId,
+    selectedBrandIds,
+    selectedSize,
+    sortBy,
+    categories,
+    categoryParam,
+    setSearchParams,
+  ]);
+
   const fetchProducts = useCallback(async () => {
     setIsFetching(true);
     try {
       const params = {
-        page: 1,
-        limit: 48,
+        page: pageFromUrl,
+        limit: PAGE_SIZE,
         sortBy,
       };
-      const q = search.trim();
+      const q = debouncedSearch.trim();
       if (q) params.search = q;
       if (selectedCategoryId) params.category_id = selectedCategoryId;
       if (selectedBrandIds.length) params.brand = selectedBrandIds.join(",");
@@ -83,45 +177,63 @@ const Products = () => {
       const res = await productsApi.list(params);
       const data = res?.products;
       setItems(Array.isArray(data) ? data : []);
+      const meta = normalizeListPagination(res, pageFromUrl, PAGE_SIZE);
+      setPagination(meta);
     } catch (error) {
       console.error("Fetch products error:", error);
       setItems([]);
+      setPagination({
+        total: 0,
+        page: 1,
+        limit: PAGE_SIZE,
+        totalPages: 0,
+      });
     } finally {
       setIsFetching(false);
     }
-  }, [search, selectedCategoryId, selectedBrandIds, selectedSize, sortBy]);
-
-  useEffect(() => {
-    const params = {};
-    if (search.trim()) params.keyword = search.trim();
-
-    if (selectedCategoryId) {
-      const cat = categories.find((c) => c._id === selectedCategoryId);
-      if (cat?.name) params.category = cat.name;
-      else params.category = selectedCategoryId;
-    } else if (categoryParam) {
-      params.category = categoryParam;
-    }
-
-    if (selectedBrandIds.length) params.brands = selectedBrandIds.join(",");
-    if (selectedSize) params.size = selectedSize;
-    if (sortBy !== "newest") params.sortBy = sortBy;
-
-    setSearchParams(params);
-
-    const t = setTimeout(() => fetchProducts(), 400);
-    return () => clearTimeout(t);
   }, [
-    search,
+    pageFromUrl,
+    debouncedSearch,
     selectedCategoryId,
     selectedBrandIds,
     selectedSize,
     sortBy,
-    fetchProducts,
-    setSearchParams,
-    categories,
-    categoryParam,
   ]);
+
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
+
+  useEffect(() => {
+    if (isFetching) return;
+    const { totalPages } = pagination;
+    if (totalPages > 0 && pageFromUrl > totalPages) {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set("page", String(totalPages));
+          return next;
+        },
+        { replace: true },
+      );
+    }
+  }, [isFetching, pagination, pageFromUrl, setSearchParams]);
+
+  const goToPage = (next) => {
+    if (next < 1 || (pagination.totalPages > 0 && next > pagination.totalPages)) {
+      return;
+    }
+    setSearchParams(
+      (prev) => {
+        const n = new URLSearchParams(prev);
+        if (next <= 1) n.delete("page");
+        else n.set("page", String(next));
+        return n;
+      },
+      { replace: true },
+    );
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   const toggleBrand = (id) => {
     setSelectedBrandIds((prev) =>
@@ -130,7 +242,7 @@ const Products = () => {
   };
 
   const clearFilters = () => {
-    setSearch("");
+    setSearchInput("");
     setSelectedBrandIds([]);
     setSelectedCategoryId("");
     setSelectedSize("");
@@ -140,13 +252,23 @@ const Products = () => {
   const hasActiveFilters = useMemo(
     () =>
       Boolean(
-        search.trim() ||
+        searchInput.trim() ||
         selectedBrandIds.length ||
         selectedCategoryId ||
         selectedSize,
       ),
-    [search, selectedBrandIds, selectedCategoryId, selectedSize],
+    [searchInput, selectedBrandIds, selectedCategoryId, selectedSize],
   );
+
+  const totalCount = pagination.total;
+  const showPagination =
+    !isFetching && pagination.totalPages > 1;
+  const rangeStart =
+    totalCount === 0 ? 0 : (pageFromUrl - 1) * PAGE_SIZE + 1;
+  const rangeEnd =
+    totalCount === 0
+      ? 0
+      : Math.min(pageFromUrl * PAGE_SIZE, totalCount);
 
   return (
     <Layout>
@@ -161,8 +283,8 @@ const Products = () => {
             <input
               type="text"
               placeholder="Tìm kiếm sản phẩm..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               className="w-full rounded-full border border-border bg-card pl-11 pr-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
@@ -288,7 +410,11 @@ const Products = () => {
         )}
 
         <p className="text-sm text-muted-foreground mb-6">
-          {isFetching ? "Đang tải…" : `${items.length} sản phẩm`}
+          {isFetching
+            ? "Đang tải…"
+            : totalCount === 0
+              ? "0 sản phẩm"
+              : `Hiển thị ${rangeStart}–${rangeEnd} / ${totalCount} sản phẩm`}
         </p>
 
         {isFetching ? (
@@ -301,15 +427,57 @@ const Products = () => {
             ))}
           </div>
         ) : items.length > 0 ? (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            {items.map((product, i) => (
-              <ProductCard
-                key={product._id || product.id}
-                product={product}
-                index={i}
-              />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+              {items.map((product, i) => (
+                <ProductCard
+                  key={product._id || product.id}
+                  product={product}
+                  index={i}
+                />
+              ))}
+            </div>
+            {showPagination && (
+              <nav
+                role="navigation"
+                aria-label="Phân trang sản phẩm"
+                className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4"
+              >
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={pageFromUrl <= 1}
+                    onClick={() => goToPage(pageFromUrl - 1)}
+                    className={cn(
+                      buttonVariants({ variant: "outline", size: "sm" }),
+                      "gap-1 pl-2",
+                    )}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Trước
+                  </button>
+                  <span className="text-sm text-muted-foreground px-2 tabular-nums">
+                    Trang {pageFromUrl} / {pagination.totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={
+                      pagination.totalPages > 0 &&
+                      pageFromUrl >= pagination.totalPages
+                    }
+                    onClick={() => goToPage(pageFromUrl + 1)}
+                    className={cn(
+                      buttonVariants({ variant: "outline", size: "sm" }),
+                      "gap-1 pr-2",
+                    )}
+                  >
+                    Sau
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </nav>
+            )}
+          </>
         ) : (
           <div className="text-center py-20 rounded-2xl border border-dashed border-border bg-card/50">
             <p className="text-muted-foreground mb-4">

@@ -1,9 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import AdminLayout from "@/components/AdminLayout";
+import { AdminPaginationBar } from "@/components/AdminPaginationBar";
 import { formatPrice } from "@/data/products";
+import { normalizeListPagination } from "@/lib/normalizeListPagination";
 import { Eye, Search } from "lucide-react";
 import { toast } from "sonner";
 import adminOrdersApi from "@/api/adminOrders.api";
+
+const ADMIN_PAGE_SIZE = 20;
 
 const statusLabels = {
   pending: "Chờ xử lý", confirmed: "Đã xác nhận", shipping: "Đang giao", delivered: "Đã giao", cancelled: "Đã hủy",
@@ -18,13 +22,26 @@ const AdminOrders = () => {
   const [isFetching, setIsFetching] = useState(false);
   const [filterStatus, setFilterStatus] = useState("");
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({
+    total: 0,
+    page: 1,
+    limit: ADMIN_PAGE_SIZE,
+    totalPages: 0,
+  });
   const [selectedOrder, setSelectedOrder] = useState(null);
 
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async () => {
     setIsFetching(true);
     try {
-      const data = await adminOrdersApi.list({ page: 1, limit: 200 });
+      const data = await adminOrdersApi.list({
+        page,
+        limit: ADMIN_PAGE_SIZE,
+        status: filterStatus || undefined,
+        search: search.trim() || undefined,
+      });
       setOrders(Array.isArray(data?.orders) ? data.orders : []);
+      setPagination(normalizeListPagination(data, page, ADMIN_PAGE_SIZE));
     } catch (error) {
       const message =
         error?.response?.data?.message ||
@@ -32,25 +49,30 @@ const AdminOrders = () => {
         "Không tải được danh sách đơn hàng.";
       toast.error(message);
       setOrders([]);
+      setPagination({
+        total: 0,
+        page: 1,
+        limit: ADMIN_PAGE_SIZE,
+        totalPages: 0,
+      });
     } finally {
       setIsFetching(false);
     }
-  };
+  }, [page, filterStatus, search]);
 
   useEffect(() => {
     fetchOrders();
-  }, []);
+  }, [fetchOrders]);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return orders.filter((o) => {
-      if (filterStatus && o.status !== filterStatus) return false;
-      if (!q) return true;
-      const id = String(o?._id || "").toLowerCase();
-      const customerName = String(o?.user_id?.full_name || "").toLowerCase();
-      return id.includes(q) || customerName.includes(q);
-    });
-  }, [orders, filterStatus, search]);
+  useEffect(() => {
+    if (isFetching) return;
+    const { totalPages } = pagination;
+    if (totalPages > 0 && page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [isFetching, pagination, page]);
+
+  const filtered = useMemo(() => orders, [orders]);
 
   const updateStatus = async (id, status) => {
     try {
@@ -73,10 +95,10 @@ const AdminOrders = () => {
       <div className="flex flex-wrap gap-3 mb-6">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <input placeholder="Tìm đơn hàng..." value={search} onChange={(e) => setSearch(e.target.value)}
+          <input placeholder="Tìm đơn hàng..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             className="w-full rounded-lg border border-border bg-card pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
         </div>
-        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
+        <select value={filterStatus} onChange={(e) => { setFilterStatus(e.target.value); setPage(1); }}
           className="rounded-lg border border-border bg-card px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
           <option value="">Tất cả trạng thái</option>
           <option value="pending">Chờ xử lý</option>
@@ -171,6 +193,14 @@ const AdminOrders = () => {
           </tbody>
         </table>
       </div>
+      <p className="text-sm text-muted-foreground mt-2">
+        {pagination.total > 0 ? `Tổng ${pagination.total} đơn hàng` : null}
+      </p>
+      <AdminPaginationBar
+        page={page}
+        totalPages={pagination.totalPages}
+        onPageChange={setPage}
+      />
     </AdminLayout>
   );
 };

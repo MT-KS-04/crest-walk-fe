@@ -1,8 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import AdminLayout from "@/components/AdminLayout";
+import { AdminPaginationBar } from "@/components/AdminPaginationBar";
 import { Search } from "lucide-react";
 import { toast } from "sonner";
 import adminInventoryApi from "@/api/adminInventory.api";
+import { normalizeListPagination } from "@/lib/normalizeListPagination";
+
+const ADMIN_PAGE_SIZE = 20;
 
 const AdminInventory = () => {
   const [inventory, setInventory] = useState([]);
@@ -10,33 +14,61 @@ const AdminInventory = () => {
   const [isFetching, setIsFetching] = useState(false);
   const [search, setSearch] = useState("");
   const [stockFilter, setStockFilter] = useState("");
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({
+    total: 0,
+    page: 1,
+    limit: ADMIN_PAGE_SIZE,
+    totalPages: 0,
+  });
 
-  const fetchInventory = async ({ lowStock } = {}) => {
-    setIsFetching(true);
-    try {
-      const data = await adminInventoryApi.list({
-        page: 1,
-        limit: 200,
-        search: search.trim() || undefined,
-        lowStock: lowStock ? "true" : undefined,
-      });
-      setInventory(Array.isArray(data?.inventory) ? data.inventory : []);
-      if (typeof data?.threshold === "number") setThreshold(data.threshold);
-    } catch (error) {
-      const message =
-        error?.response?.data?.message ||
-        error?.response?.data?.error ||
-        "Không tải được tồn kho.";
-      toast.error(message);
-      setInventory([]);
-    } finally {
-      setIsFetching(false);
-    }
-  };
+  const fetchInventory = useCallback(
+    async ({ lowStock } = {}) => {
+      setIsFetching(true);
+      try {
+        const data = await adminInventoryApi.list({
+          page,
+          limit: ADMIN_PAGE_SIZE,
+          search: search.trim() || undefined,
+          lowStock: lowStock ? "true" : undefined,
+        });
+        setInventory(Array.isArray(data?.inventory) ? data.inventory : []);
+        if (typeof data?.threshold === "number") setThreshold(data.threshold);
+        setPagination(normalizeListPagination(data, page, ADMIN_PAGE_SIZE));
+      } catch (error) {
+        const message =
+          error?.response?.data?.message ||
+          error?.response?.data?.error ||
+          "Không tải được tồn kho.";
+        toast.error(message);
+        setInventory([]);
+        setPagination({
+          total: 0,
+          page: 1,
+          limit: ADMIN_PAGE_SIZE,
+          totalPages: 0,
+        });
+      } finally {
+        setIsFetching(false);
+      }
+    },
+    [page, search],
+  );
 
   useEffect(() => {
     fetchInventory({ lowStock: stockFilter === "low" });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchInventory, stockFilter]);
+
+  useEffect(() => {
+    if (isFetching) return;
+    const { totalPages } = pagination;
+    if (totalPages > 0 && page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [isFetching, pagination, page]);
+
+  useEffect(() => {
+    setPage(1);
   }, [stockFilter]);
 
   const filtered = useMemo(() => {
@@ -105,10 +137,10 @@ const AdminInventory = () => {
       <div className="flex flex-col md:flex-row gap-4 mb-6">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <input placeholder="Tìm sản phẩm..." value={search} onChange={(e) => setSearch(e.target.value)}
+          <input placeholder="Tìm sản phẩm..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             className="w-full rounded-lg border border-border bg-card pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
         </div>
-        <select value={stockFilter} onChange={(e) => setStockFilter(e.target.value)}
+        <select value={stockFilter} onChange={(e) => { setStockFilter(e.target.value); setPage(1); }}
           className="rounded-lg border border-border bg-card px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
           <option value="">Tất cả tồn kho</option>
           <option value="low">Sắp hết hàng (&lt;{threshold})</option>
@@ -122,7 +154,11 @@ const AdminInventory = () => {
         </button>
       </div>
 
-      <p className="text-xs text-muted-foreground mb-4">{filtered.length} sản phẩm</p>
+      <p className="text-xs text-muted-foreground mb-4">
+        {pagination.total > 0
+          ? `Tổng ${pagination.total} sản phẩm (trang hiển thị ${filtered.length})`
+          : `${filtered.length} sản phẩm`}
+      </p>
 
       <div className="space-y-4">
         {isFetching ? (
@@ -148,8 +184,11 @@ const AdminInventory = () => {
                   className="rounded-lg bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90">Lưu</button>
               </div>
               <div className="flex flex-wrap gap-3">
-                {(item.sizes || []).map((s) => (
-                  <div key={s.size} className="flex items-center gap-2 rounded-lg border border-border p-2">
+                {(item.sizes || []).map((s, idx) => (
+                  <div
+                    key={`${item._id}-size-${idx}-${String(s.size)}`}
+                    className="flex items-center gap-2 rounded-lg border border-border p-2"
+                  >
                     <span className="text-xs text-muted-foreground w-8">Size {s.size}</span>
                     <input type="number" value={s.quantity ?? 0} onChange={(e) => updateStockLocal(item._id, s.size, Number(e.target.value))}
                       className={`w-16 rounded border border-border bg-background px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-primary ${(s.quantity ?? 0) < threshold ? "text-red-400" : ""}`} />
@@ -158,9 +197,14 @@ const AdminInventory = () => {
               </div>
             </div>
           );
-        })
+        }        )
         )}
       </div>
+      <AdminPaginationBar
+        page={page}
+        totalPages={pagination.totalPages}
+        onPageChange={setPage}
+      />
     </AdminLayout>
   );
 };

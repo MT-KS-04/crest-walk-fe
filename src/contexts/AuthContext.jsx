@@ -1,10 +1,13 @@
 import { createContext, useContext, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import authApi from "@/api/auth.api";
 import axiosClient, { setAccessToken } from "@/api/axiosClient";
+import { parseAuthResponseBody, parseMeResponse } from "@/lib/parseAuthResponse";
 
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
+  const navigate = useNavigate();
   const [user, setUser] = useState(() => {
     const savedUser = localStorage.getItem('user');
     return savedUser ? JSON.parse(savedUser) : null;
@@ -31,18 +34,31 @@ export const AuthProvider = ({ children }) => {
     try {
       setIsLoading(true);
       const data = await authApi.login(email, password);
-      const { accessToken, user: userData } = data || {};
+      let { accessToken, user: userData } = parseAuthResponseBody(data);
+
+      if (accessToken && !userData) {
+        applyToken(accessToken, null);
+        try {
+          const me = await authApi.getMe();
+          userData = parseMeResponse(me);
+        } catch {
+          /* /auth/me không có hoặc lỗi — vẫn coi là đăng nhập nếu đã có token */
+        }
+      }
 
       if (accessToken) {
         applyToken(accessToken, userData);
       }
 
-      if (userData) {
-        setUser(userData);
-      }
+      setUser(userData ?? null);
 
-      setIsAuthenticated(Boolean(accessToken && userData));
-      return { success: true, data };
+      setIsAuthenticated(Boolean(accessToken));
+      return {
+        success: true,
+        data,
+        user: userData,
+        accessToken,
+      };
     } catch (error) {
       setIsAuthenticated(false);
       setUser(null);
@@ -62,18 +78,27 @@ export const AuthProvider = ({ children }) => {
     try {
       setIsLoading(true);
       const data = await authApi.register(payload);
-      const { accessToken, user: userData } = data || {};
+      let { accessToken, user: userData } = parseAuthResponseBody(data);
+
+      if (accessToken && !userData) {
+        applyToken(accessToken, null);
+        try {
+          const me = await authApi.getMe();
+          userData = parseMeResponse(me);
+        } catch {
+          /* ignore */
+        }
+      }
 
       if (accessToken) {
         applyToken(accessToken, userData);
       }
 
-      if (userData) {
-        setUser(userData);
-        setIsAuthenticated(true);
-      }
+      setUser(userData ?? null);
 
-      return { success: true, data };
+      setIsAuthenticated(Boolean(accessToken));
+
+      return { success: true, data, user: userData, accessToken };
     } catch (error) {
       setIsAuthenticated(false);
       setUser(null);
@@ -92,6 +117,7 @@ export const AuthProvider = ({ children }) => {
       setUser(null);
       setIsAuthenticated(false);
       setIsLoading(false);
+      navigate("/auth", { replace: true });
     }
   };
 

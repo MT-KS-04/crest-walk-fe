@@ -1,21 +1,38 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import AdminLayout from "@/components/AdminLayout";
+import { AdminPaginationBar } from "@/components/AdminPaginationBar";
 import { formatPrice } from "@/data/products";
+import { normalizeListPagination } from "@/lib/normalizeListPagination";
 import { Search, Ban, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
 import adminUsersApi from "@/api/adminUsers.api";
+
+const ADMIN_PAGE_SIZE = 20;
 
 const AdminUsers = () => {
   const [users, setUsers] = useState([]);
   const [isFetching, setIsFetching] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({
+    total: 0,
+    page: 1,
+    limit: ADMIN_PAGE_SIZE,
+    totalPages: 0,
+  });
 
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     setIsFetching(true);
     try {
-      const data = await adminUsersApi.list({ page: 1, limit: 200 });
+      const data = await adminUsersApi.list({
+        page,
+        limit: ADMIN_PAGE_SIZE,
+        search: search.trim() || undefined,
+        status: statusFilter || undefined,
+      });
       setUsers(Array.isArray(data?.users) ? data.users : []);
+      setPagination(normalizeListPagination(data, page, ADMIN_PAGE_SIZE));
     } catch (error) {
       const message =
         error?.response?.data?.message ||
@@ -23,27 +40,30 @@ const AdminUsers = () => {
         "Không tải được danh sách người dùng.";
       toast.error(message);
       setUsers([]);
+      setPagination({
+        total: 0,
+        page: 1,
+        limit: ADMIN_PAGE_SIZE,
+        totalPages: 0,
+      });
     } finally {
       setIsFetching(false);
     }
-  };
+  }, [page, search, statusFilter]);
 
   useEffect(() => {
     fetchUsers();
-  }, []);
+  }, [fetchUsers]);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return users.filter((u) => {
-      const matchStatus = !statusFilter || u.status === statusFilter;
-      if (!matchStatus) return false;
-      if (!q) return true;
-      const name = String(u?.full_name || "").toLowerCase();
-      const email = String(u?.email || "").toLowerCase();
-      const phone = String(u?.phone || "");
-      return name.includes(q) || email.includes(q) || phone.includes(search.trim());
-    });
-  }, [users, search, statusFilter]);
+  useEffect(() => {
+    if (isFetching) return;
+    const { totalPages } = pagination;
+    if (totalPages > 0 && page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [isFetching, pagination, page]);
+
+  const filtered = useMemo(() => users, [users]);
 
   const toggleStatus = async (user) => {
     const nextStatus = user.status === "active" ? "blocked" : "active";
@@ -88,10 +108,10 @@ const AdminUsers = () => {
       <div className="flex flex-col md:flex-row gap-4 mb-6">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <input placeholder="Tìm theo tên, email, SĐT..." value={search} onChange={(e) => setSearch(e.target.value)}
+          <input placeholder="Tìm theo tên, email, SĐT..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             className="w-full rounded-lg border border-border bg-card pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
         </div>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
+        <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
           className="rounded-lg border border-border bg-card px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
           <option value="">Tất cả trạng thái</option>
           <option value="active">Hoạt động</option>
@@ -163,6 +183,14 @@ const AdminUsers = () => {
           </tbody>
         </table>
       </div>
+      <p className="text-sm text-muted-foreground mt-2">
+        {pagination.total > 0 ? `Tổng ${pagination.total} người dùng` : null}
+      </p>
+      <AdminPaginationBar
+        page={page}
+        totalPages={pagination.totalPages}
+        onPageChange={setPage}
+      />
     </AdminLayout>
   );
 };

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useLayoutEffect, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ShoppingBag, Heart, Star, ArrowLeft, Minus, Plus } from "lucide-react";
@@ -10,8 +10,12 @@ import { useCart } from "@/contexts/CartContext";
 import { useWishlist } from "@/contexts/WishlistContext";
 import { useAuth } from "@/contexts/AuthContext";
 import reviewApi from "@/api/review.api";
+import { normalizeListPagination } from "@/lib/normalizeListPagination";
+import { AdminPaginationBar } from "@/components/AdminPaginationBar";
 import { toast } from "sonner";
 import { User as UserIcon, MessageSquare, Send } from "lucide-react";
+
+const REVIEW_PAGE_SIZE = 5;
 
 const ProductDetail = () => {
   const { id } = useParams();
@@ -28,6 +32,13 @@ const ProductDetail = () => {
 
   // Review states
   const [reviews, setReviews] = useState([]);
+  const [reviewPage, setReviewPage] = useState(1);
+  const [reviewPagination, setReviewPagination] = useState({
+    total: 0,
+    page: 1,
+    limit: REVIEW_PAGE_SIZE,
+    totalPages: 0,
+  });
   const [isReviewsLoading, setIsReviewsLoading] = useState(false);
   const [canReview, setCanReview] = useState(false);
   const [newRating, setNewRating] = useState(5);
@@ -67,7 +78,6 @@ const ProductDetail = () => {
     };
 
     fetchDetail();
-    fetchReviews();
     if (isAuthenticated) {
       checkReviewEligibility();
     }
@@ -75,19 +85,59 @@ const ProductDetail = () => {
     window.scrollTo(0, 0);
   }, [id, isAuthenticated]);
 
-  const fetchReviews = async () => {
+  useLayoutEffect(() => {
+    setReviewPage(1);
+  }, [id]);
+
+  const fetchReviews = useCallback(async () => {
+    if (!id) return;
     setIsReviewsLoading(true);
     try {
-      const res = await reviewApi.getProductReviews(id);
+      const res = await reviewApi.getProductReviews(id, {
+        page: reviewPage,
+        limit: REVIEW_PAGE_SIZE,
+      });
+      let list = [];
       if (res.success) {
-        setReviews(res.data);
+        if (Array.isArray(res.data)) {
+          list = res.data;
+          setReviewPagination(normalizeListPagination(res, reviewPage, REVIEW_PAGE_SIZE));
+        } else if (res.data && typeof res.data === "object") {
+          const d = res.data;
+          list = Array.isArray(d.reviews)
+            ? d.reviews
+            : Array.isArray(d.data)
+              ? d.data
+              : [];
+          setReviewPagination(normalizeListPagination(d, reviewPage, REVIEW_PAGE_SIZE));
+        }
       }
+      setReviews(Array.isArray(list) ? list : []);
     } catch (error) {
       console.error("Fetch reviews error:", error);
+      setReviews([]);
+      setReviewPagination({
+        total: 0,
+        page: 1,
+        limit: REVIEW_PAGE_SIZE,
+        totalPages: 0,
+      });
     } finally {
       setIsReviewsLoading(false);
     }
-  };
+  }, [id, reviewPage]);
+
+  useEffect(() => {
+    fetchReviews();
+  }, [fetchReviews]);
+
+  useEffect(() => {
+    if (isReviewsLoading) return;
+    const { totalPages } = reviewPagination;
+    if (totalPages > 0 && reviewPage > totalPages) {
+      setReviewPage(totalPages);
+    }
+  }, [isReviewsLoading, reviewPagination, reviewPage]);
 
   const checkReviewEligibility = async () => {
     try {
@@ -365,7 +415,10 @@ const ProductDetail = () => {
 
             {/* Review List */}
             <div className="flex-1">
-              <h2 className="font-heading text-2xl font-bold mb-6">Nhận xét từ khách hàng ({reviews.length})</h2>
+              <h2 className="font-heading text-2xl font-bold mb-6">
+                Nhận xét từ khách hàng (
+                {reviewPagination.total > 0 ? reviewPagination.total : reviews.length})
+              </h2>
               
               {isReviewsLoading ? (
                 <div className="py-10 text-center">
@@ -407,6 +460,14 @@ const ProductDetail = () => {
                 <div className="py-20 text-center bg-card/30 rounded-2xl border border-dashed border-border">
                   <p className="text-muted-foreground italic">Chưa có nhận xét nào cho sản phẩm này.</p>
                 </div>
+              )}
+              {!isReviewsLoading && reviewPagination.totalPages > 1 && (
+                <AdminPaginationBar
+                  page={reviewPage}
+                  totalPages={reviewPagination.totalPages}
+                  onPageChange={setReviewPage}
+                  className="mt-8"
+                />
               )}
             </div>
           </div>

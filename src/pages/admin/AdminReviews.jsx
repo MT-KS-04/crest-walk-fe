@@ -1,8 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import AdminLayout from "@/components/AdminLayout";
+import { AdminPaginationBar } from "@/components/AdminPaginationBar";
 import { Star, CheckCircle, XCircle, Search } from "lucide-react";
 import { toast } from "sonner";
 import adminReviewsApi from "@/api/adminReviews.api";
+import { normalizeListPagination } from "@/lib/normalizeListPagination";
+
+const ADMIN_PAGE_SIZE = 20;
 
 const AdminReviews = () => {
   const [reviews, setReviews] = useState([]);
@@ -10,28 +14,59 @@ const AdminReviews = () => {
   const [filter, setFilter] = useState("");
   const [search, setSearch] = useState("");
   const [ratingFilter, setRatingFilter] = useState(null);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({
+    total: 0,
+    page: 1,
+    limit: ADMIN_PAGE_SIZE,
+    totalPages: 0,
+  });
 
-  const fetchReviews = async () => {
+  const fetchReviews = useCallback(async () => {
     setIsFetching(true);
     try {
       const data = await adminReviewsApi.list({
         status: filter || undefined,
-        page: 1,
-        limit: 200,
+        page,
+        limit: ADMIN_PAGE_SIZE,
       });
-      setReviews(Array.isArray(data?.data?.reviews) ? data.data.reviews : []);
+      const list = Array.isArray(data?.data?.reviews)
+        ? data.data.reviews
+        : [];
+      setReviews(list);
+      const meta = normalizeListPagination(
+        data?.data && typeof data.data === "object" && !Array.isArray(data.data)
+          ? data.data
+          : data,
+        page,
+        ADMIN_PAGE_SIZE,
+      );
+      setPagination(meta);
     } catch (error) {
       toast.error(error?.response?.data?.message || "Không tải được đánh giá.");
       setReviews([]);
+      setPagination({
+        total: 0,
+        page: 1,
+        limit: ADMIN_PAGE_SIZE,
+        totalPages: 0,
+      });
     } finally {
       setIsFetching(false);
     }
-  };
+  }, [filter, page]);
 
   useEffect(() => {
     fetchReviews();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter]);
+  }, [fetchReviews]);
+
+  useEffect(() => {
+    if (isFetching) return;
+    const { totalPages } = pagination;
+    if (totalPages > 0 && page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [isFetching, pagination, page]);
 
   const filtered = useMemo(() => reviews.filter((r) => {
     const matchStatus = !filter || r.status === filter;
@@ -73,10 +108,10 @@ const AdminReviews = () => {
       <div className="flex flex-col md:flex-row gap-4 mb-6">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <input placeholder="Tìm theo tên, sản phẩm, nội dung..." value={search} onChange={(e) => setSearch(e.target.value)}
+          <input placeholder="Tìm theo tên, sản phẩm, nội dung..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             className="w-full rounded-lg border border-border bg-card pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
         </div>
-        <select value={ratingFilter ?? ""} onChange={(e) => setRatingFilter(e.target.value ? Number(e.target.value) : null)}
+        <select value={ratingFilter ?? ""} onChange={(e) => { setRatingFilter(e.target.value ? Number(e.target.value) : null); setPage(1); }}
           className="rounded-lg border border-border bg-card px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
           <option value="">Tất cả sao</option>
           {[5, 4, 3, 2, 1].map((s) => <option key={s} value={s}>{s} sao</option>)}
@@ -85,14 +120,18 @@ const AdminReviews = () => {
 
       <div className="flex gap-2 mb-6">
         {[{ label: "Tất cả", value: "" }, { label: "Chờ duyệt", value: "pending" }, { label: "Đã duyệt", value: "approved" }, { label: "Từ chối", value: "rejected" }].map((opt) => (
-          <button key={opt.value} onClick={() => setFilter(opt.value)}
+          <button key={opt.value} onClick={() => { setFilter(opt.value); setPage(1); }}
             className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${filter === opt.value ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground hover:text-foreground"}`}>
             {opt.label}
           </button>
         ))}
       </div>
 
-      <p className="text-xs text-muted-foreground mb-4">{filtered.length} đánh giá</p>
+      <p className="text-xs text-muted-foreground mb-4">
+        {pagination.total > 0
+          ? `Tổng ${pagination.total} đánh giá (lọc trang: ${filtered.length})`
+          : `${filtered.length} đánh giá`}
+      </p>
 
       <div className="space-y-4">
         {isFetching ? (
@@ -146,6 +185,11 @@ const AdminReviews = () => {
           </div>
         ))}
       </div>
+      <AdminPaginationBar
+        page={page}
+        totalPages={pagination.totalPages}
+        onPageChange={setPage}
+      />
     </AdminLayout>
   );
 };

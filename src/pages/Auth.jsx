@@ -5,6 +5,7 @@ import Layout from "@/components/Layout";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
+import { formatApiErrorMessage } from "@/lib/formatApiErrorMessage";
 
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -35,19 +36,20 @@ const Auth = () => {
     try {
       const result = await handleLogin(loginForm.email, loginForm.password);
       toast.success("Đăng nhập thành công!");
-      
-      const role = result?.data?.user?.role;
+
+      const role = result?.user?.role ?? result?.data?.user?.role;
       if (role === "admin") {
         navigate("/admin");
       } else {
         navigate("/");
       }
     } catch (error) {
-      const message =
-        error?.response?.data?.message ||
-        error?.response?.data?.error ||
-        "Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.";
-      toast.error(message);
+      toast.error(
+        formatApiErrorMessage(
+          error,
+          "Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.",
+        ),
+      );
     }
   };
 
@@ -79,11 +81,7 @@ const Auth = () => {
       toast.success("Đăng ký thành công! Vui lòng đăng nhập để tiếp tục.");
       setIsLogin(true);
     } catch (error) {
-      const message =
-        error?.response?.data?.message ||
-        error?.response?.data?.error ||
-        "Đăng ký thất bại. Vui lòng thử lại.";
-      toast.error(message);
+      toast.error(formatApiErrorMessage(error, "Đăng ký thất bại. Vui lòng thử lại."));
     }
   };
 

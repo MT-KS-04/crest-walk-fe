@@ -1,12 +1,23 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import AdminLayout from "@/components/AdminLayout";
+import { AdminPaginationBar } from "@/components/AdminPaginationBar";
 import { Plus, Pencil, Trash2, ToggleLeft, ToggleRight } from "lucide-react";
 import { toast } from "sonner";
 import adminBannersApi from "@/api/adminBanners.api";
+import { normalizeListPagination } from "@/lib/normalizeListPagination";
+
+const ADMIN_PAGE_SIZE = 20;
 
 const AdminBanners = () => {
   const [banners, setBanners] = useState([]);
   const [isFetching, setIsFetching] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({
+    total: 0,
+    page: 1,
+    limit: ADMIN_PAGE_SIZE,
+    totalPages: 0,
+  });
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({
@@ -18,10 +29,10 @@ const AdminBanners = () => {
     order: 0,
   });
 
-  const fetchBanners = async () => {
+  const fetchBanners = useCallback(async () => {
     setIsFetching(true);
     try {
-      const data = await adminBannersApi.list({ page: 1, limit: 200 });
+      const data = await adminBannersApi.list({ page, limit: ADMIN_PAGE_SIZE });
       const list = Array.isArray(data?.data?.banners) ? data.data.banners : [];
       setBanners(list.map((b) => ({
         id: b._id,
@@ -32,17 +43,39 @@ const AdminBanners = () => {
         isActive: Boolean(b.is_active),
         order: b.order_index ?? 0,
       })));
+      const meta = normalizeListPagination(
+        data?.data && typeof data.data === "object" && !Array.isArray(data.data)
+          ? data.data
+          : data,
+        page,
+        ADMIN_PAGE_SIZE,
+      );
+      setPagination(meta);
     } catch (error) {
       toast.error(error?.response?.data?.message || "Không tải được banner.");
       setBanners([]);
+      setPagination({
+        total: 0,
+        page: 1,
+        limit: ADMIN_PAGE_SIZE,
+        totalPages: 0,
+      });
     } finally {
       setIsFetching(false);
     }
-  };
+  }, [page]);
 
   useEffect(() => {
     fetchBanners();
-  }, []);
+  }, [fetchBanners]);
+
+  useEffect(() => {
+    if (isFetching) return;
+    const { totalPages } = pagination;
+    if (totalPages > 0 && page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [isFetching, pagination, page]);
 
   const toggleActive = async (id) => {
     const target = banners.find((b) => b.id === id);
@@ -127,7 +160,10 @@ const AdminBanners = () => {
       <div className="space-y-4">
         {isFetching ? (
           <p className="text-center text-muted-foreground py-8">Đang tải...</p>
-        ) : banners.map((banner) => (
+        ) : banners.length === 0 ? (
+          <p className="text-center text-muted-foreground py-8">Chưa có banner.</p>
+        ) : (
+          banners.map((banner) => (
           <div key={banner.id} className="rounded-xl border border-border bg-card overflow-hidden flex">
             <div className="w-48 h-28 flex-shrink-0">
               <img src={banner.imageUrl} alt={banner.title} className="w-full h-full object-cover" />
@@ -154,8 +190,17 @@ const AdminBanners = () => {
               </div>
             </div>
           </div>
-        ))}
+        ))
+        )}
       </div>
+      <p className="text-sm text-muted-foreground mt-2">
+        {pagination.total > 0 ? `Tổng ${pagination.total} banner` : null}
+      </p>
+      <AdminPaginationBar
+        page={page}
+        totalPages={pagination.totalPages}
+        onPageChange={setPage}
+      />
     </AdminLayout>
   );
 };

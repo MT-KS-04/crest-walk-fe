@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import AdminLayout from "@/components/AdminLayout";
+import { AdminPaginationBar } from "@/components/AdminPaginationBar";
 import { formatPrice } from "@/data/products";
+import { normalizeListPagination } from "@/lib/normalizeListPagination";
 import {
   Plus,
   Pencil,
@@ -16,6 +18,8 @@ import { toast } from "sonner";
 import adminProductsApi from "@/api/adminProducts.api";
 import adminCategoriesApi from "@/api/adminCategories.api";
 import adminBrandsApi from "@/api/adminBrands.api";
+
+const ADMIN_PAGE_SIZE = 20;
 
 const MAX_IMAGE_DIMENSION = 1280;
 const JPEG_QUALITY = 0.82;
@@ -147,6 +151,13 @@ const AdminProducts = () => {
   const [items, setItems] = useState([]);
   const [isFetching, setIsFetching] = useState(false);
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({
+    total: 0,
+    page: 1,
+    limit: ADMIN_PAGE_SIZE,
+    totalPages: 0,
+  });
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({
@@ -166,11 +177,16 @@ const AdminProducts = () => {
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
 
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     setIsFetching(true);
     try {
-      const data = await adminProductsApi.list({ page: 1, limit: 200 });
+      const data = await adminProductsApi.list({
+        page,
+        limit: ADMIN_PAGE_SIZE,
+        search: search.trim() || undefined,
+      });
       setItems(Array.isArray(data?.products) ? data.products : []);
+      setPagination(normalizeListPagination(data, page, ADMIN_PAGE_SIZE));
     } catch (error) {
       const message =
         error?.response?.data?.message ||
@@ -178,10 +194,16 @@ const AdminProducts = () => {
         "Không tải được danh sách sản phẩm.";
       toast.error(message);
       setItems([]);
+      setPagination({
+        total: 0,
+        page: 1,
+        limit: ADMIN_PAGE_SIZE,
+        totalPages: 0,
+      });
     } finally {
       setIsFetching(false);
     }
-  };
+  }, [page, search]);
 
   const fetchLookups = async () => {
     try {
@@ -197,19 +219,20 @@ const AdminProducts = () => {
   };
 
   useEffect(() => {
-    fetchProducts();
     fetchLookups();
   }, []);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter((p) => {
-      const name = (p?.name || "").toLowerCase();
-      const brandName = (p?.brand_id?.name || "").toLowerCase();
-      return name.includes(q) || brandName.includes(q);
-    });
-  }, [items, search]);
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
+
+  useEffect(() => {
+    if (isFetching) return;
+    const { totalPages } = pagination;
+    if (totalPages > 0 && page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [isFetching, pagination, page]);
 
   const handleDelete = async (id) => {
     const ok = confirm("Xóa sản phẩm này?");
@@ -728,7 +751,10 @@ const AdminProducts = () => {
         <input
           placeholder="Tìm sản phẩm..."
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPage(1);
+          }}
           className="w-full rounded-lg border border-border bg-card pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
         />
       </div>
@@ -767,7 +793,7 @@ const AdminProducts = () => {
                   Đang tải...
                 </td>
               </tr>
-            ) : filtered.length === 0 ? (
+            ) : items.length === 0 ? (
               <tr>
                 <td
                   colSpan={6}
@@ -777,7 +803,7 @@ const AdminProducts = () => {
                 </td>
               </tr>
             ) : (
-              filtered.map((product) => (
+              items.map((product) => (
                 <tr
                   key={product._id}
                   className="border-b border-border hover:bg-secondary/50 transition-colors"
@@ -842,6 +868,16 @@ const AdminProducts = () => {
           </tbody>
         </table>
       </div>
+      <p className="text-sm text-muted-foreground mt-2">
+        {pagination.total > 0
+          ? `Tổng ${pagination.total} sản phẩm`
+          : null}
+      </p>
+      <AdminPaginationBar
+        page={page}
+        totalPages={pagination.totalPages}
+        onPageChange={setPage}
+      />
     </AdminLayout>
   );
 };
