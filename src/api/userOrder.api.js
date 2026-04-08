@@ -13,6 +13,9 @@ const userOrderApi = {
   getOrderDetail: (id) => {
     return axiosClient.get(`/orders/${id}`);
   },
+  cancelOrder: (id) => {
+    return axiosClient.patch(`/orders/${id}/cancel`);
+  },
 };
 
 export default userOrderApi;
