@@ -28,6 +28,8 @@ import Auth from "./pages/Auth.jsx";
 import Checkout from "./pages/Checkout.jsx";
 import Profile from "./pages/Profile.jsx";
 import OrderTracking from "./pages/OrderTracking.jsx";
+import About from "./pages/About.jsx";
+import AdminRoute from "./components/AdminRoute.jsx";
 
 
 const queryClient = new QueryClient();
@@ -48,23 +50,26 @@ const App = () => (
                 <Route path="/cart" element={<Cart />} />
                 <Route path="/wishlist" element={<Wishlist />} />
                 {/* Admin Routes */}
-                <Route path="/admin" element={<AdminDashboard />} />
-                <Route path="/admin/products" element={<AdminProducts />} />
-                <Route path="/admin/categories" element={<AdminCategories />} />
-                <Route path="/admin/brands" element={<AdminBrands />} />
-                <Route path="/admin/orders" element={<AdminOrders />} />
-                <Route path="/admin/users" element={<AdminUsers />} />
-                <Route path="/admin/inventory" element={<AdminInventory />} />
-                <Route path="/admin/promotions" element={<AdminPromotions />} />
-                <Route path="/admin/revenue" element={<AdminRevenue />} />
-                <Route path="/admin/bestsellers" element={<AdminBestsellers />} />
-                <Route path="/admin/reviews" element={<AdminReviews />} />
-                <Route path="/admin/banners" element={<AdminBanners />} />
+                <Route element={<AdminRoute />}>
+                  <Route path="/admin" element={<AdminDashboard />} />
+                  <Route path="/admin/products" element={<AdminProducts />} />
+                  <Route path="/admin/categories" element={<AdminCategories />} />
+                  <Route path="/admin/brands" element={<AdminBrands />} />
+                  <Route path="/admin/orders" element={<AdminOrders />} />
+                  <Route path="/admin/users" element={<AdminUsers />} />
+                  <Route path="/admin/inventory" element={<AdminInventory />} />
+                  <Route path="/admin/promotions" element={<AdminPromotions />} />
+                  <Route path="/admin/revenue" element={<AdminRevenue />} />
+                  <Route path="/admin/bestsellers" element={<AdminBestsellers />} />
+                  <Route path="/admin/reviews" element={<AdminReviews />} />
+                  <Route path="/admin/banners" element={<AdminBanners />} />
+                </Route>
                 {/* New Routes */}
                 <Route path="/auth" element={<Auth />} />
                 <Route path="/checkout" element={<Checkout />} />
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/order-tracking" element={<OrderTracking />} />
+                <Route path="/about" element={<About />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </BrowserRouter>

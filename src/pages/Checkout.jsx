@@ -81,7 +81,9 @@ const Checkout = () => {
           window.location.href = res.paymentUrl;
         } else {
           toast.success("Đặt hàng thành công!");
-          navigate(`/order-tracking?id=${res.data._id || ''}`);
+          navigate(
+            `/order-tracking?id=${res.data._id || ""}&phone=${encodeURIComponent(shippingForm.phone || "")}`,
+          );
         }
       }
     } catch (error) {

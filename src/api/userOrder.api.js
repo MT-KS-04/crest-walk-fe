@@ -13,6 +13,11 @@ const userOrderApi = {
   getOrderDetail: (id) => {
     return axiosClient.get(`/orders/${id}`);
   },
+
+  /** Tra cứu công khai: orderId + phone (khách); chủ đơn đăng nhập có thể chỉ cần orderId */
+  trackOrder: (params) => {
+    return axiosClient.get("/orders/track", { params });
+  },
   cancelOrder: (id) => {
     return axiosClient.patch(`/orders/${id}/cancel`);
   },

@@ -1,24 +1,35 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Search, SlidersHorizontal, X, ChevronDown, Check } from "lucide-react";
+import { Search, SlidersHorizontal, X } from "lucide-react";
 import Layout from "@/components/Layout";
 import ProductCard from "@/components/ProductCard";
 import productsApi from "@/api/products.api";
 import brandsApi from "@/api/brands.api";
-import { sizeOptions, formatPrice } from "@/data/products";
+import categoriesApi from "@/api/categories.api";
+import { sizeOptions } from "@/data/products";
+
+const readBrandIdsFromSearch = () => {
+  if (typeof window === "undefined") return [];
+  const q = new URLSearchParams(window.location.search);
+  const b = q.get("brands") || q.get("brand");
+  return b?.trim()
+    ? b
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : [];
+};
 
 const Products = () => {
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // States cho bộ lọc
   const [search, setSearch] = useState(searchParams.get("keyword") || "");
-  const [minPrice, setMinPrice] = useState(searchParams.get("minPrice") || "");
-  const [maxPrice, setMaxPrice] = useState(searchParams.get("maxPrice") || "");
+  const [selectedBrandIds, setSelectedBrandIds] = useState(
+    readBrandIdsFromSearch,
+  );
+  const [selectedCategoryId, setSelectedCategoryId] = useState("");
   const [selectedSize, setSelectedSize] = useState(
     searchParams.get("size") || "",
-  );
-  const [selectedBrand, setSelectedBrand] = useState(
-    searchParams.get("brand") || "",
   );
   const [sortBy, setSortBy] = useState(searchParams.get("sortBy") || "newest");
 
@@ -26,49 +37,51 @@ const Products = () => {
   const [isFetching, setIsFetching] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [brands, setBrands] = useState([]);
+  const [categories, setCategories] = useState([]);
 
-  // Lấy danh sách thương hiệu từ API
   useEffect(() => {
-    const fetchBrands = async () => {
+    const load = async () => {
       try {
-        const res = await brandsApi.list();
-        setBrands(Array.isArray(res?.data) ? res.data : []);
-      } catch (error) {
-        console.error("Fetch brands error:", error);
+        const [bRes, cRes] = await Promise.all([
+          brandsApi.list(),
+          categoriesApi.list(),
+        ]);
+        setBrands(Array.isArray(bRes?.data) ? bRes.data : []);
+        setCategories(Array.isArray(cRes?.data) ? cRes.data : []);
+      } catch (e) {
+        console.error("Fetch lookups error:", e);
       }
     };
-    fetchBrands();
+    load();
   }, []);
 
-  // Lấy danh sách sản phẩm từ API (Filter & Search)
+  const categoryParam = searchParams.get("category") || "";
+  useEffect(() => {
+    if (!categoryParam || !categories.length) return;
+    if (/^[0-9a-fA-F]{24}$/.test(categoryParam)) {
+      setSelectedCategoryId(categoryParam);
+      return;
+    }
+    const match = categories.find((c) => c.name === categoryParam);
+    if (match) setSelectedCategoryId(match._id);
+  }, [categoryParam, categories]);
+
   const fetchProducts = useCallback(async () => {
     setIsFetching(true);
     try {
-      const hasFilters =
-        minPrice ||
-        maxPrice ||
-        selectedSize ||
-        selectedBrand ||
-        sortBy !== "newest";
+      const params = {
+        page: 1,
+        limit: 48,
+        sortBy,
+      };
+      const q = search.trim();
+      if (q) params.search = q;
+      if (selectedCategoryId) params.category_id = selectedCategoryId;
+      if (selectedBrandIds.length) params.brand = selectedBrandIds.join(",");
+      if (selectedSize) params.size = selectedSize;
 
-      let response;
-      if (search && !hasFilters) {
-        // Chỉ tìm kiếm theo từ khóa
-        response = await productsApi.search(search);
-      } else {
-        // Sử dụng bộ lọc (giá, size, brand, sortBy)
-        // Lưu ý: Backend filter hiện tại không hỗ trợ keyword đồng thời
-        const params = {
-          minPrice: minPrice || undefined,
-          maxPrice: maxPrice || undefined,
-          size: selectedSize || undefined,
-          brand: selectedBrand || undefined,
-          sortBy: sortBy || undefined,
-        };
-        response = await productsApi.filter(params);
-      }
-
-      const data = response.products || response.data || response;
+      const res = await productsApi.list(params);
+      const data = res?.products;
       setItems(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error("Fetch products error:", error);
@@ -76,237 +89,243 @@ const Products = () => {
     } finally {
       setIsFetching(false);
     }
-  }, [search, minPrice, maxPrice, selectedSize, selectedBrand, sortBy]);
+  }, [search, selectedCategoryId, selectedBrandIds, selectedSize, sortBy]);
 
-  // Sync với URL và trigger fetch
   useEffect(() => {
     const params = {};
-    if (search) params.keyword = search;
-    if (minPrice) params.minPrice = minPrice;
-    if (maxPrice) params.maxPrice = maxPrice;
+    if (search.trim()) params.keyword = search.trim();
+
+    if (selectedCategoryId) {
+      const cat = categories.find((c) => c._id === selectedCategoryId);
+      if (cat?.name) params.category = cat.name;
+      else params.category = selectedCategoryId;
+    } else if (categoryParam) {
+      params.category = categoryParam;
+    }
+
+    if (selectedBrandIds.length) params.brands = selectedBrandIds.join(",");
     if (selectedSize) params.size = selectedSize;
-    if (selectedBrand) params.brand = selectedBrand;
     if (sortBy !== "newest") params.sortBy = sortBy;
 
     setSearchParams(params);
 
-    const delayDebounceFn = setTimeout(() => {
-      fetchProducts();
-    }, 400);
-
-    return () => clearTimeout(delayDebounceFn);
+    const t = setTimeout(() => fetchProducts(), 400);
+    return () => clearTimeout(t);
   }, [
     search,
-    minPrice,
-    maxPrice,
+    selectedCategoryId,
+    selectedBrandIds,
     selectedSize,
-    selectedBrand,
     sortBy,
     fetchProducts,
     setSearchParams,
+    categories,
+    categoryParam,
   ]);
 
+  const toggleBrand = (id) => {
+    setSelectedBrandIds((prev) =>
+      prev.includes(id) ? prev.filter((b) => b !== id) : [...prev, id],
+    );
+  };
+
   const clearFilters = () => {
-    setMinPrice("");
-    setMaxPrice("");
+    setSearch("");
+    setSelectedBrandIds([]);
+    setSelectedCategoryId("");
     setSelectedSize("");
-    setSelectedBrand("");
     setSortBy("newest");
   };
+
+  const hasActiveFilters = useMemo(
+    () =>
+      Boolean(
+        search.trim() ||
+        selectedBrandIds.length ||
+        selectedCategoryId ||
+        selectedSize,
+      ),
+    [search, selectedBrandIds, selectedCategoryId, selectedSize],
+  );
 
   return (
     <Layout>
       <div className="container py-8">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-          <h1 className="font-heading text-4xl font-bold uppercase">
-            Tất cả sản phẩm
-          </h1>
-          <div className="flex items-center gap-3">
+        <h1 className="font-heading text-4xl font-bold mb-8 uppercase">
+          Tất cả sản phẩm
+        </h1>
+
+        <div className="flex flex-col sm:flex-row gap-3 mb-6">
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Tìm kiếm sản phẩm..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full rounded-full border border-border bg-card pl-11 pr-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+          <div className="flex gap-3 shrink-0">
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
-              className="rounded-lg border border-border bg-card px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              className="rounded-full border border-border bg-card px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary min-w-[160px]"
             >
               <option value="newest">Mới nhất</option>
-              <option value="price_asc">Giá: Thấp đến Cao</option>
-              <option value="price_desc">Giá: Cao đến Thấp</option>
+              <option value="price_asc">Giá: Thấp đến cao</option>
+              <option value="price_desc">Giá: Cao đến thấp</option>
               <option value="rating">Đánh giá cao</option>
             </select>
             <button
+              type="button"
               onClick={() => setShowFilters(!showFilters)}
-              className={`flex items-center gap-2 rounded-lg border px-6 py-2 text-sm font-medium transition-all ${
+              className={`flex items-center gap-2 rounded-full border px-6 py-3 text-sm font-medium transition-colors ${
                 showFilters
                   ? "border-primary bg-primary/10 text-primary"
                   : "border-border hover:bg-secondary"
               }`}
             >
               <SlidersHorizontal className="h-4 w-4" />
-              {showFilters ? "Đóng bộ lọc" : "Bộ lọc"}
+              Bộ lọc
             </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          {/* Sidebar Filters */}
-          <aside
-            className={`lg:block ${showFilters ? "block" : "hidden"} space-y-8 animate-in fade-in slide-in-from-left-4`}
-          >
-            {/* Search */}
-            <div>
-              <p className="text-xs font-bold uppercase tracking-widest mb-4">
-                Tìm kiếm
-              </p>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <input
-                  type="text"
-                  placeholder="Tên sản phẩm..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="w-full rounded-lg border border-border bg-card pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-              </div>
+        {showFilters && (
+          <div className="rounded-xl border border-border bg-card p-6 mb-6 animate-slide-up">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-heading text-sm font-semibold">Bộ lọc</h3>
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="text-xs text-primary hover:underline flex items-center gap-1"
+                >
+                  <X className="h-3 w-3" /> Xóa tất cả
+                </button>
+              )}
             </div>
 
-            {/* Price Range */}
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <p className="text-xs font-bold uppercase tracking-widest">
-                  Khoảng giá
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-3">
+                  Thương hiệu
                 </p>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  type="number"
-                  placeholder="Từ"
-                  value={minPrice}
-                  onChange={(e) => setMinPrice(e.target.value)}
-                  className="rounded-lg border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-                <input
-                  type="number"
-                  placeholder="Đến"
-                  value={maxPrice}
-                  onChange={(e) => setMaxPrice(e.target.value)}
-                  className="rounded-lg border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-              </div>
-            </div>
-
-            {/* Size */}
-            <div>
-              <p className="text-xs font-bold uppercase tracking-widest mb-4">
-                Kích cỡ (Size)
-              </p>
-              <div className="grid grid-cols-5 gap-2">
-                {sizeOptions.map((size) => (
-                  <button
-                    key={size}
-                    onClick={() =>
-                      setSelectedSize(selectedSize == size ? "" : size)
-                    }
-                    className={`flex h-10 items-center justify-center rounded-lg border text-xs font-bold transition-all ${
-                      selectedSize == size
-                        ? "border-primary bg-primary text-primary-foreground shadow-glow"
-                        : "border-border hover:border-foreground"
-                    }`}
-                  >
-                    {size}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Brand */}
-            <div>
-              <p className="text-xs font-bold uppercase tracking-widest mb-4">
-                Thương hiệu
-              </p>
-              <div className="space-y-2">
-                {brands.map((brand) => (
-                  <button
-                    key={brand._id}
-                    onClick={() =>
-                      setSelectedBrand(selectedBrand === brand._id ? "" : brand._id)
-                    }
-                    className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors hover:bg-secondary"
-                  >
-                    <span
-                      className={
-                        selectedBrand === brand._id
-                          ? "font-bold text-primary"
-                          : "text-muted-foreground"
-                      }
+                <div className="flex flex-wrap gap-2">
+                  {brands.map((brand) => (
+                    <button
+                      key={brand._id}
+                      type="button"
+                      onClick={() => toggleBrand(brand._id)}
+                      className={`rounded-full px-4 py-1.5 text-xs font-medium border transition-colors ${
+                        selectedBrandIds.includes(brand._id)
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border text-muted-foreground hover:border-foreground"
+                      }`}
                     >
                       {brand.name}
-                    </span>
-                    {selectedBrand === brand._id && (
-                      <Check className="h-4 w-4 text-primary" />
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <button
-              onClick={clearFilters}
-              className="w-full rounded-lg border border-dashed border-border py-3 text-xs font-bold uppercase tracking-widest text-muted-foreground hover:border-primary hover:text-primary transition-all"
-            >
-              Xóa tất cả bộ lọc
-            </button>
-          </aside>
-
-          {/* Product Grid */}
-          <main className="lg:col-span-3">
-            <div className="flex items-center justify-between mb-6">
-              <p className="text-sm text-muted-foreground">
-                {isFetching
-                  ? "Đang tải dữ liệu..."
-                  : `Hiển thị ${items.length} sản phẩm`}
-              </p>
-            </div>
-
-            {isFetching ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {[...Array(6)].map((_, i) => (
-                  <div
-                    key={i}
-                    className="aspect-[4/5] bg-muted animate-pulse rounded-2xl"
-                  />
-                ))}
-              </div>
-            ) : items.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {items.map((product, i) => (
-                  <ProductCard
-                    key={product._id || product.id}
-                    product={product}
-                    index={i}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-20 bg-card rounded-2xl border border-dashed border-border text-center px-4">
-                <div className="bg-muted rounded-full p-6 mb-4">
-                  <X className="h-10 w-10 text-muted-foreground" />
+                    </button>
+                  ))}
                 </div>
-                <h3 className="font-heading text-xl font-bold mb-2">
-                  Không tìm thấy sản phẩm
-                </h3>
-                <p className="text-muted-foreground max-w-xs mb-6">
-                  Chúng tôi không tìm thấy sản phẩm nào khớp với bộ lọc hiện tại
-                  của bạn.
-                </p>
-                <button
-                  onClick={clearFilters}
-                  className="rounded-full bg-gradient-fire px-8 py-3 text-sm font-bold text-primary-foreground shadow-glow"
-                >
-                  Xóa bộ lọc và thử lại
-                </button>
               </div>
+
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-3">
+                  Danh mục
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {categories.map((cat) => (
+                    <button
+                      key={cat._id}
+                      type="button"
+                      onClick={() =>
+                        setSelectedCategoryId(
+                          selectedCategoryId === cat._id ? "" : cat._id,
+                        )
+                      }
+                      className={`rounded-full px-4 py-1.5 text-xs font-medium border transition-colors ${
+                        selectedCategoryId === cat._id
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border text-muted-foreground hover:border-foreground"
+                      }`}
+                    >
+                      {cat.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-3">
+                  Size
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {sizeOptions.map((size) => (
+                    <button
+                      key={size}
+                      type="button"
+                      onClick={() =>
+                        setSelectedSize(
+                          String(selectedSize) === String(size)
+                            ? ""
+                            : String(size),
+                        )
+                      }
+                      className={`rounded-md px-3 py-1.5 text-xs font-medium border transition-colors ${
+                        String(selectedSize) === String(size)
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border text-muted-foreground hover:border-foreground"
+                      }`}
+                    >
+                      {size}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <p className="text-sm text-muted-foreground mb-6">
+          {isFetching ? "Đang tải…" : `${items.length} sản phẩm`}
+        </p>
+
+        {isFetching ? (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            {[...Array(8)].map((_, i) => (
+              <div
+                key={i}
+                className="aspect-[4/5] bg-muted animate-pulse rounded-2xl"
+              />
+            ))}
+          </div>
+        ) : items.length > 0 ? (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            {items.map((product, i) => (
+              <ProductCard
+                key={product._id || product.id}
+                product={product}
+                index={i}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-20 rounded-2xl border border-dashed border-border bg-card/50">
+            <p className="text-muted-foreground mb-4">
+              Không tìm thấy sản phẩm nào.
+            </p>
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="rounded-full bg-gradient-fire px-8 py-3 text-sm font-semibold text-primary-foreground"
+              >
+                Xóa bộ lọc
+              </button>
             )}
-          </main>
-        </div>
+          </div>
+        )}
       </div>
     </Layout>
   );

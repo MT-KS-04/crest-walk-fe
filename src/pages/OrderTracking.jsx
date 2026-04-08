@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { Search, Package, Truck, CheckCircle2, Clock, MapPin, Phone, ArrowLeft, Loader2, CreditCard } from "lucide-react";
 import Layout from "@/components/Layout";
@@ -7,6 +7,7 @@ import { formatPrice } from "@/data/products";
 import userOrderApi from "@/api/userOrder.api";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { useAuth } from "@/contexts/AuthContext";
 
 const statusColor = {
   "pending": "bg-yellow-500/20 text-yellow-500",
@@ -25,37 +26,54 @@ const statusLabel = {
 };
 
 const OrderTracking = () => {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { isAuthenticated } = useAuth();
   const initialId = searchParams.get("id") || "";
+  const initialPhone = searchParams.get("phone") || "";
+
   const [orderId, setOrderId] = useState(initialId);
+  const [phone, setPhone] = useState(initialPhone);
   const [searchedId, setSearchedId] = useState(initialId);
-  
+
   const [order, setOrder] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [hasSearched, setHasSearched] = useState(!!initialId);
+  const [hasSearched, setHasSearched] = useState(false);
 
-  const fetchOrder = async (id) => {
-    if (!id) return;
-    setIsLoading(true);
-    setHasSearched(true);
-    try {
-      const res = await userOrderApi.getOrderDetail(id);
-      if (res && res.success) {
-        setOrder(res.data);
+  const fetchOrder = useCallback(
+    async (id, phoneInput) => {
+      if (!id?.trim()) return;
+      setIsLoading(true);
+      setHasSearched(true);
+      setSearchedId(id.trim());
+      try {
+        const params = { orderId: id.trim() };
+        const p = phoneInput?.trim();
+        if (p) params.phone = p;
+        const res = await userOrderApi.trackOrder(params);
+        if (res && res.success) {
+          setOrder(res.data);
+        } else {
+          setOrder(null);
+        }
+      } catch (error) {
+        const msg =
+          error?.response?.data?.message ||
+          "Không tìm thấy đơn hàng hoặc thông tin không khớp.";
+        toast.error(msg);
+        setOrder(null);
+      } finally {
+        setIsLoading(false);
       }
-    } catch (error) {
-      toast.error(error?.response?.data?.message || "Không tìm thấy đơn hàng");
-      setOrder(null);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    },
+    [],
+  );
 
   useEffect(() => {
-    if (initialId) {
-      fetchOrder(initialId);
+    if (!initialId) return;
+    if (initialPhone.trim() || isAuthenticated) {
+      fetchOrder(initialId, initialPhone);
     }
-  }, [initialId]);
+  }, [initialId, initialPhone, isAuthenticated, fetchOrder]);
 
   useEffect(() => {
     const paymentStatus = searchParams.get("payment_status");
@@ -71,9 +89,18 @@ const OrderTracking = () => {
 
   const handleSearch = (e) => {
     e.preventDefault();
-    if (!orderId.trim()) return;
-    setSearchedId(orderId.trim());
-    fetchOrder(orderId.trim());
+    if (!orderId.trim()) {
+      toast.error("Vui lòng nhập mã đơn hàng.");
+      return;
+    }
+    if (!isAuthenticated && !phone.trim()) {
+      toast.error("Vui lòng nhập số điện thoại đặt hàng để tra cứu.");
+      return;
+    }
+    const next = { id: orderId.trim() };
+    if (phone.trim()) next.phone = phone.trim();
+    setSearchParams(next);
+    fetchOrder(orderId.trim(), phone);
   };
 
   const getTimeline = (orderData) => {
@@ -118,20 +145,49 @@ const OrderTracking = () => {
         </Link>
 
         <h1 className="font-heading text-4xl font-bold mb-2 uppercase">Theo dõi đơn hàng</h1>
-        <p className="text-muted-foreground text-sm mb-8">Nhập mã đơn hàng để kiểm tra trạng thái ngay lập tức</p>
+        <p className="text-muted-foreground text-sm mb-2">
+          Nhập mã đơn hàng và số điện thoại đặt hàng. Nếu bạn đã đăng nhập đúng tài
+          khoản đặt đơn, chỉ cần mã đơn.
+        </p>
+        <p className="text-xs text-muted-foreground/80 mb-8">
+          Mã đơn là chuỗi 24 ký tự (MongoDB ObjectId), có trong email/xác nhận hoặc
+          trang &quot;Đơn hàng&quot; sau khi đặt.
+        </p>
 
-        <form onSubmit={handleSearch} className="flex gap-3 mb-10">
-          <div className="relative flex-1">
+        <form onSubmit={handleSearch} className="space-y-4 mb-10">
+          <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Nhập mã đơn hàng (VD: 660f789...)"
+              placeholder="Mã đơn hàng (VD: 674a1b2c3d4e5f6789012345)"
               className="pl-10 bg-secondary border-border"
               value={orderId}
               onChange={(e) => setOrderId(e.target.value)}
               disabled={isLoading}
+              autoComplete="off"
             />
           </div>
-          <button type="submit" disabled={isLoading || !orderId.trim()} className="rounded-full bg-primary px-8 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-all disabled:opacity-50">
+          <div className="relative">
+            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="tel"
+              inputMode="numeric"
+              placeholder={
+                isAuthenticated
+                  ? "SĐT đặt hàng (không bắt buộc nếu đã đăng nhập đúng tài khoản)"
+                  : "Số điện thoại đặt hàng (bắt buộc)"
+              }
+              className="pl-10 bg-secondary border-border"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              disabled={isLoading}
+              autoComplete="tel"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={isLoading || !orderId.trim()}
+            className="w-full sm:w-auto rounded-full bg-primary px-8 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-all disabled:opacity-50 inline-flex items-center justify-center gap-2"
+          >
             {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Tra cứu"}
           </button>
         </form>
@@ -227,7 +283,14 @@ const OrderTracking = () => {
               </h2>
               <div className="space-y-3">
                 {order.items?.map((item, i) => {
+<<<<<<< Updated upstream
                   const imageUrl = item.product_id?.images?.[0] || item.product_id?.image || 'https://via.placeholder.com/150';
+=======
+                  const pid = item.product_id;
+                  const imageUrl =
+                    (typeof pid === "object" && pid?.images?.[0]) ||
+                    "https://via.placeholder.com/150";
+>>>>>>> Stashed changes
                   return (
                     <div key={i} className="flex items-center gap-3 rounded-lg bg-secondary/30 p-3 border border-border">
                       <img src={imageUrl} alt={item.product_name} className="h-16 w-16 rounded-lg object-cover border border-border/50" />

@@ -33,22 +33,16 @@ const Header = () => {
             Sản phẩm
           </Link>
           <Link
-            to="/products?category=Running"
+            to="/order-tracking"
             className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
           >
-            Running
+            Tra cứu đơn hàng
           </Link>
           <Link
-            to="/products?category=Basketball"
+            to="/about"
             className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
           >
-            Basketball
-          </Link>
-          <Link
-            to="/products?category=Lifestyle"
-            className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Lifestyle
+            Về chúng tôi
           </Link>
         </nav>
 
@@ -170,25 +164,18 @@ const Header = () => {
               Sản phẩm
             </Link>
             <Link
-              to="/products?category=Running"
+              to="/order-tracking"
               onClick={() => setMobileMenuOpen(false)}
               className="text-sm font-medium text-muted-foreground hover:text-foreground"
             >
-              Running
+              Tra cứu đơn hàng
             </Link>
             <Link
-              to="/products?category=Basketball"
+              to="/about"
               onClick={() => setMobileMenuOpen(false)}
               className="text-sm font-medium text-muted-foreground hover:text-foreground"
             >
-              Basketball
-            </Link>
-            <Link
-              to="/products?category=Lifestyle"
-              onClick={() => setMobileMenuOpen(false)}
-              className="text-sm font-medium text-muted-foreground hover:text-foreground"
-            >
-              Lifestyle
+              Về chúng tôi
             </Link>
           </nav>
         </div>
