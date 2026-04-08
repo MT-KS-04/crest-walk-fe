@@ -60,16 +60,44 @@ const Header = () => {
             <Search className="h-5 w-5" />
           </Link>
           {!isLoading && isAuthenticated && user ? (
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-medium text-foreground max-w-[160px] truncate">
-                {user.full_name || user.email || "Người dùng"}
-              </span>
-              <button
-                onClick={handleLogout}
-                className="text-xs font-medium text-muted-foreground hover:text-destructive transition-colors"
-              >
-                Đăng xuất
-              </button>
+            <div className="relative group">
+              <Link to="/profile" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+                <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center border border-primary/20 overflow-hidden">
+                  {user.avatar ? (
+                    <img src={user.avatar} alt={user.full_name} className="h-full w-full object-cover" />
+                  ) : (
+                    <User className="h-5 w-5 text-primary" />
+                  )}
+                </div>
+              </Link>
+              
+              {/* Dropdown menu on hover */}
+              <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-background border border-border opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                <div className="py-1">
+                  <div className="px-4 py-2 border-b border-border">
+                    <p className="text-sm font-medium text-foreground truncate">{user.full_name || "Người dùng"}</p>
+                    <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                  </div>
+                  <Link
+                    to="/profile"
+                    className="block px-4 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+                  >
+                    Hồ sơ của tôi
+                  </Link>
+                  <Link
+                    to="/profile?tab=orders"
+                    className="block px-4 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+                  >
+                    Đơn hàng
+                  </Link>
+                  <button
+                    onClick={handleLogout}
+                    className="w-full text-left block px-4 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors"
+                  >
+                    Đăng xuất
+                  </button>
+                </div>
+              </div>
             </div>
           ) : (
             !isLoading && (
