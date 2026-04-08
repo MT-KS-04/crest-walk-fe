@@ -1,7 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import AdminLayout from "@/components/AdminLayout";
 import { formatPrice } from "@/data/products";
-import { Plus, Pencil, Trash2, Search, ImagePlus, X, Star } from "lucide-react";
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  Search,
+  ImagePlus,
+  X,
+  Star,
+  Loader2,
+} from "lucide-react";
 import { toast } from "sonner";
 import adminProductsApi from "@/api/adminProducts.api";
 import adminCategoriesApi from "@/api/adminCategories.api";
@@ -9,7 +18,11 @@ import adminBrandsApi from "@/api/adminBrands.api";
 
 const MAX_IMAGE_DIMENSION = 1280;
 const JPEG_QUALITY = 0.82;
-const MAX_TOTAL_BASE64_CHARS = 16 * 1024 * 1024; // ~16MB text
+
+const newImageId = () =>
+  typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 const readFileAsDataUrl = (file) =>
   new Promise((resolve, reject) => {
@@ -48,6 +61,76 @@ const compressImageFile = async (file) => {
   return canvas.toDataURL("image/jpeg", JPEG_QUALITY);
 };
 
+/**
+ * Thử tải trực tiếp trong trình duyệt; nếu CORS chặn (vd. gstatic) thì gọi API admin proxy.
+ * @param {string} url
+ */
+const urlToFile = async (url, filename) => {
+  try {
+    const res = await fetch(url, { mode: "cors" });
+    if (res.ok) {
+      const blob = await res.blob();
+      const ct = res.headers.get("content-type")?.split(";")[0]?.trim();
+      return new File([blob], filename, {
+        type: ct || blob.type || "image/jpeg",
+      });
+    }
+  } catch {
+    /* CORS hoặc mạng — fallback server */
+  }
+
+  try {
+    const blob = await adminProductsApi.fetchRemoteImageBlob(url);
+    return new File([blob], filename, {
+      type:
+        blob.type && blob.type !== "application/octet-stream"
+          ? blob.type
+          : "image/jpeg",
+    });
+  } catch (error) {
+    let msg =
+      error?.response?.data?.message ||
+      (typeof error?.response?.data === "string" ? error.response.data : null) ||
+      error?.message;
+    if (!msg && error?.response?.data instanceof Blob) {
+      try {
+        const text = await error.response.data.text();
+        const parsed = JSON.parse(text);
+        msg = parsed?.message;
+      } catch {
+        /* ignore */
+      }
+    }
+    throw new Error(
+      msg ||
+        "Không tải được ảnh từ URL. Hãy tải ảnh về máy rồi dùng Tải lên.",
+    );
+  }
+};
+
+const appendDefaultSizes = (formData) => {
+  const defaultSizes = [39, 40, 41, 42, 43].map((s) => ({
+    size: s,
+    quantity: 0,
+  }));
+  defaultSizes.forEach((row, i) => {
+    formData.append(`sizes[${i}][size]`, String(row.size));
+    formData.append(`sizes[${i}][quantity]`, String(row.quantity));
+  });
+};
+
+const appendProductTextFields = (formData, form, { includeSizes }) => {
+  formData.append("name", form.name);
+  formData.append("price", String(Number(form.price)));
+  formData.append("category_id", form.category_id);
+  formData.append("brand_id", form.brand_id);
+  formData.append("description", form.description || "");
+  if (form.original_price) {
+    formData.append("original_price", String(Number(form.original_price)));
+  }
+  if (includeSizes) appendDefaultSizes(formData);
+};
+
 const AdminProducts = () => {
   const [items, setItems] = useState([]);
   const [isFetching, setIsFetching] = useState(false);
@@ -64,6 +147,7 @@ const AdminProducts = () => {
   });
   const [images, setImages] = useState([]);
   const [thumbIndex, setThumbIndex] = useState(0);
+  const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef(null);
 
   const [categories, setCategories] = useState([]);
@@ -147,7 +231,14 @@ const AdminProducts = () => {
           : product?.brand_id || "",
       description: product?.description || "",
     });
-    setImages(Array.isArray(product?.images) ? product.images : []);
+    const urls = Array.isArray(product?.images) ? product.images : [];
+    setImages(
+      urls.map((url) => ({
+        id: newImageId(),
+        preview: url,
+        sourceUrl: url,
+      })),
+    );
     setThumbIndex(0);
     setShowForm(true);
   };
@@ -171,11 +262,24 @@ const AdminProducts = () => {
     const files = e.target.files;
     if (!files) return;
     try {
-      const compressedImages = await Promise.all(
-        Array.from(files).map((file) => compressImageFile(file)),
+      const newItems = await Promise.all(
+        Array.from(files).map(async (file) => {
+          const dataUrl = await compressImageFile(file);
+          const blob = await (await fetch(dataUrl)).blob();
+          const outFile = new File(
+            [blob],
+            `${(file.name.replace(/\.[^.]+$/, "") || "image")}.jpg`,
+            { type: "image/jpeg" },
+          );
+          return {
+            id: newImageId(),
+            preview: dataUrl,
+            file: outFile,
+          };
+        }),
       );
-      setImages((prev) => [...prev, ...compressedImages.filter(Boolean)]);
-      toast.success(`Đã thêm ${compressedImages.length} ảnh (đã nén).`);
+      setImages((prev) => [...prev, ...newItems]);
+      toast.success(`Đã thêm ${newItems.length} ảnh (đã nén).`);
     } catch {
       toast.error("Không thể đọc/nén ảnh. Vui lòng thử ảnh khác.");
     }
@@ -184,8 +288,12 @@ const AdminProducts = () => {
 
   const handleAddImageUrl = () => {
     const url = prompt("Nhập URL ảnh:");
-    if (url) {
-      setImages((prev) => [...prev, url]);
+    if (url?.trim()) {
+      const u = url.trim();
+      setImages((prev) => [
+        ...prev,
+        { id: newImageId(), preview: u, sourceUrl: u },
+      ]);
     }
   };
 
@@ -195,7 +303,28 @@ const AdminProducts = () => {
     else if (thumbIndex > index) setThumbIndex((prev) => prev - 1);
   };
 
+  /**
+   * Trả về File cho từng ảnh (upload hoặc fetch URL) theo thứ tự đã chọn thumbnail trước.
+   */
+  const buildImageFilesInOrder = async (ordered) => {
+    const files = [];
+    for (let i = 0; i < ordered.length; i++) {
+      const item = ordered[i];
+      if (item.file) {
+        files.push(item.file);
+        continue;
+      }
+      const url = item.sourceUrl || item.preview;
+      if (!url || url.startsWith("blob:")) {
+        throw new Error("Thiếu file hoặc URL ảnh hợp lệ.");
+      }
+      files.push(await urlToFile(url, `image-${i}.jpg`));
+    }
+    return files;
+  };
+
   const handleSave = async () => {
+    if (isSaving) return;
     if (!form.name || !form.price || !form.category_id || !form.brand_id) {
       toast.error("Vui lòng điền đầy đủ thông tin!");
       return;
@@ -204,46 +333,46 @@ const AdminProducts = () => {
       toast.error("Vui lòng thêm ít nhất 1 ảnh!");
       return;
     }
-    // Reorder images so thumb is first
-    const orderedImages = [images[thumbIndex], ...images.filter((_, i) => i !== thumbIndex)];
 
-    const estimatedPayloadChars = orderedImages.reduce(
-      (sum, img) => sum + (typeof img === "string" ? img.length : 0),
-      0,
-    );
-    if (estimatedPayloadChars > MAX_TOTAL_BASE64_CHARS) {
-      toast.error(
-        "Tổng dung lượng ảnh vẫn quá lớn. Vui lòng giảm số lượng ảnh hoặc dùng URL ảnh.",
-      );
-      return;
-    }
+    const ordered = [
+      images[thumbIndex],
+      ...images.filter((_, i) => i !== thumbIndex),
+    ];
 
-    const basePayload = {
-      name: form.name,
-      price: Number(form.price),
-      category_id: form.category_id,
-      brand_id: form.brand_id,
-      images: orderedImages,
-      description: form.description || "",
-    };
+    const hasLocalUpload = ordered.some((item) => item.file);
+    const imageUrlStrings = ordered.map((item) => item.sourceUrl || item.preview);
 
-    if (form.original_price) {
-      basePayload.original_price = Number(form.original_price);
-    }
-
+    setIsSaving(true);
     try {
       if (editingId) {
-        await adminProductsApi.update(editingId, basePayload);
-        toast.success("Đã cập nhật sản phẩm!");
+        if (hasLocalUpload) {
+          const fd = new FormData();
+          appendProductTextFields(fd, form, { includeSizes: false });
+          const imageFiles = await buildImageFilesInOrder(ordered);
+          imageFiles.forEach((file) => fd.append("images", file));
+          await adminProductsApi.update(editingId, fd);
+          toast.success("Đã cập nhật sản phẩm!");
+        } else {
+          const payload = {
+            name: form.name,
+            price: Number(form.price),
+            category_id: form.category_id,
+            brand_id: form.brand_id,
+            description: form.description || "",
+            images: imageUrlStrings,
+          };
+          if (form.original_price) {
+            payload.original_price = Number(form.original_price);
+          }
+          await adminProductsApi.update(editingId, payload);
+          toast.success("Đã cập nhật sản phẩm!");
+        }
       } else {
-        const defaultSizes = [39, 40, 41, 42, 43].map((s) => ({
-          size: s,
-          quantity: 0,
-        }));
-        await adminProductsApi.create({
-          ...basePayload,
-          sizes: defaultSizes,
-        });
+        const fd = new FormData();
+        appendProductTextFields(fd, form, { includeSizes: true });
+        const imageFiles = await buildImageFilesInOrder(ordered);
+        imageFiles.forEach((file) => fd.append("images", file));
+        await adminProductsApi.create(fd);
         toast.success("Đã thêm sản phẩm mới!");
       }
 
@@ -264,31 +393,85 @@ const AdminProducts = () => {
       const message =
         error?.response?.data?.message ||
         error?.response?.data?.error ||
+        error?.message ||
         "Lưu sản phẩm thất bại.";
       toast.error(message);
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  const inputClass = "rounded-lg border border-border bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary";
+  const inputClass =
+    "rounded-lg border border-border bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary";
 
   return (
     <AdminLayout>
       <div className="flex items-center justify-between mb-6">
         <h1 className="font-heading text-3xl font-bold">QUẢN LÝ SẢN PHẨM</h1>
-        <button onClick={handleAddNew}
-          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90">
+        <button
+          type="button"
+          onClick={handleAddNew}
+          disabled={isSaving}
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
+        >
           <Plus className="h-4 w-4" /> Thêm sản phẩm
         </button>
       </div>
 
       {showForm && (
-        <div className="rounded-xl border border-border bg-card p-6 mb-6 animate-slide-up">
-          <h3 className="font-heading text-sm font-semibold mb-4">{editingId ? "SỬA SẢN PHẨM" : "THÊM SẢN PHẨM MỚI"}</h3>
+        <div className="relative rounded-xl border border-border bg-card p-6 mb-6 animate-slide-up overflow-hidden">
+          {isSaving && (
+            <div
+              className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 rounded-xl bg-background/85 backdrop-blur-sm px-6 text-center"
+              aria-busy="true"
+              aria-live="polite"
+            >
+              <Loader2 className="h-10 w-10 animate-spin text-primary shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-foreground">
+                  Đang xử lý…
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Đang tải ảnh lên Cloudinary, có thể mất vài giây.
+                </p>
+              </div>
+            </div>
+          )}
+          <h3 className="font-heading text-sm font-semibold mb-4">
+            {editingId ? "SỬA SẢN PHẨM" : "THÊM SẢN PHẨM MỚI"}
+          </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            <input placeholder="Tên sản phẩm" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputClass} />
-            <input placeholder="Giá (VND)" type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} className={inputClass} />
-            <input placeholder="Giá gốc (tuỳ chọn)" type="number" value={form.original_price} onChange={(e) => setForm({ ...form, original_price: e.target.value })} className={inputClass} />
-            <select value={form.brand_id} onChange={(e) => setForm({ ...form, brand_id: e.target.value })} className={inputClass}>
+            <input
+              placeholder="Tên sản phẩm"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              disabled={isSaving}
+              className={inputClass}
+            />
+            <input
+              placeholder="Giá (VND)"
+              type="number"
+              value={form.price}
+              onChange={(e) => setForm({ ...form, price: e.target.value })}
+              disabled={isSaving}
+              className={inputClass}
+            />
+            <input
+              placeholder="Giá gốc (tuỳ chọn)"
+              type="number"
+              value={form.original_price}
+              onChange={(e) =>
+                setForm({ ...form, original_price: e.target.value })
+              }
+              disabled={isSaving}
+              className={inputClass}
+            />
+            <select
+              value={form.brand_id}
+              onChange={(e) => setForm({ ...form, brand_id: e.target.value })}
+              disabled={isSaving}
+              className={inputClass}
+            >
               <option value="">Chọn thương hiệu</option>
               {brands.map((b) => (
                 <option key={b._id} value={b._id}>
@@ -296,7 +479,14 @@ const AdminProducts = () => {
                 </option>
               ))}
             </select>
-            <select value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })} className={inputClass}>
+            <select
+              value={form.category_id}
+              onChange={(e) =>
+                setForm({ ...form, category_id: e.target.value })
+              }
+              disabled={isSaving}
+              className={inputClass}
+            >
               <option value="">Chọn danh mục</option>
               {categories.map((c) => (
                 <option key={c._id} value={c._id}>
@@ -305,16 +495,31 @@ const AdminProducts = () => {
               ))}
             </select>
           </div>
-          <textarea placeholder="Mô tả sản phẩm" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
-            className={`w-full ${inputClass} mb-4`} rows={3} />
+          <textarea
+            placeholder="Mô tả sản phẩm"
+            value={form.description}
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+            disabled={isSaving}
+            className={`w-full ${inputClass} mb-4`}
+            rows={3}
+          />
 
           {/* Image Management */}
           <div className="mb-4">
-            <label className="block text-sm font-semibold text-foreground mb-2">Ảnh sản phẩm</label>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              Ảnh sản phẩm
+            </label>
             <div className="flex flex-wrap gap-3 mb-3">
               {images.map((img, index) => (
-                <div key={index} className={`relative group rounded-lg overflow-hidden border-2 transition-all ${index === thumbIndex ? "border-primary ring-2 ring-primary/30" : "border-border hover:border-muted-foreground"}`}>
-                  <img src={img} alt={`Ảnh ${index + 1}`} className="h-24 w-24 object-cover" />
+                <div
+                  key={img.id}
+                  className={`relative group rounded-lg overflow-hidden border-2 transition-all ${index === thumbIndex ? "border-primary ring-2 ring-primary/30" : "border-border hover:border-muted-foreground"}`}
+                >
+                  <img
+                    src={img.preview}
+                    alt={`Ảnh ${index + 1}`}
+                    className="h-24 w-24 object-cover"
+                  />
                   {/* Thumb badge */}
                   {index === thumbIndex && (
                     <div className="absolute top-1 left-1 bg-primary text-primary-foreground text-[10px] font-bold px-1.5 py-0.5 rounded">
@@ -324,16 +529,20 @@ const AdminProducts = () => {
                   {/* Overlay actions */}
                   <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5">
                     <button
+                      type="button"
                       onClick={() => setThumbIndex(index)}
+                      disabled={isSaving}
                       title="Đặt làm ảnh đại diện"
-                      className="p-1.5 rounded-full bg-background/90 text-foreground hover:bg-primary hover:text-primary-foreground transition-colors"
+                      className="p-1.5 rounded-full bg-background/90 text-foreground hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-50"
                     >
                       <Star className="h-3.5 w-3.5" />
                     </button>
                     <button
+                      type="button"
                       onClick={() => handleRemoveImage(index)}
+                      disabled={isSaving}
                       title="Xóa ảnh"
-                      className="p-1.5 rounded-full bg-background/90 text-foreground hover:bg-destructive hover:text-destructive-foreground transition-colors"
+                      className="p-1.5 rounded-full bg-background/90 text-foreground hover:bg-destructive hover:text-destructive-foreground transition-colors disabled:opacity-50"
                     >
                       <X className="h-3.5 w-3.5" />
                     </button>
@@ -344,103 +553,193 @@ const AdminProducts = () => {
               {/* Add image buttons */}
               <div className="flex gap-2">
                 <button
+                  type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="h-24 w-24 rounded-lg border-2 border-dashed border-border hover:border-primary flex flex-col items-center justify-center gap-1 text-muted-foreground hover:text-primary transition-colors"
+                  disabled={isSaving}
+                  className="h-24 w-24 rounded-lg border-2 border-dashed border-border hover:border-primary flex flex-col items-center justify-center gap-1 text-muted-foreground hover:text-primary transition-colors disabled:pointer-events-none disabled:opacity-50"
                 >
                   <ImagePlus className="h-5 w-5" />
                   <span className="text-[10px] font-medium">Tải lên</span>
                 </button>
                 <button
+                  type="button"
                   onClick={handleAddImageUrl}
-                  className="h-24 w-24 rounded-lg border-2 border-dashed border-border hover:border-primary flex flex-col items-center justify-center gap-1 text-muted-foreground hover:text-primary transition-colors"
+                  disabled={isSaving}
+                  className="h-24 w-24 rounded-lg border-2 border-dashed border-border hover:border-primary flex flex-col items-center justify-center gap-1 text-muted-foreground hover:text-primary transition-colors disabled:pointer-events-none disabled:opacity-50"
                 >
                   <Plus className="h-5 w-5" />
                   <span className="text-[10px] font-medium">URL</span>
                 </button>
               </div>
-              <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleFileChange} className="hidden" />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                disabled={isSaving}
+                onChange={handleFileChange}
+                className="hidden"
+              />
             </div>
             <p className="text-xs text-muted-foreground">
-              Hover vào ảnh để chọn <Star className="inline h-3 w-3" /> làm ảnh đại diện (thumbnail) hoặc <X className="inline h-3 w-3" /> xóa. Ảnh đầu tiên được chọn mặc định.
+              Hover vào ảnh để chọn <Star className="inline h-3 w-3" /> làm ảnh
+              đại diện (thumbnail) hoặc <X className="inline h-3 w-3" /> xóa.
+              Ảnh đầu tiên được chọn mặc định.
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              Ảnh tải lên sẽ tự nén trước khi gửi để tránh lỗi payload quá lớn.
+              Ảnh tải lên sẽ tự nén trước khi gửi (multipart) giống Postman. Thêm
+              mới bắt buộc có ảnh file hoặc URL (sẽ tải về rồi gửi).
             </p>
           </div>
 
           <div className="flex gap-3">
-            <button onClick={handleSave} className="rounded-lg bg-primary px-6 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90">
-              {editingId ? "Cập nhật" : "Thêm"}
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={isSaving}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-6 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-60"
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Đang gửi…
+                </>
+              ) : editingId ? (
+                "Cập nhật"
+              ) : (
+                "Thêm"
+              )}
             </button>
-            <button onClick={() => { setShowForm(false); setEditingId(null); }}
-              className="rounded-lg border border-border px-6 py-2 text-sm text-muted-foreground hover:text-foreground">Hủy</button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowForm(false);
+                setEditingId(null);
+              }}
+              disabled={isSaving}
+              className="rounded-lg border border-border px-6 py-2 text-sm text-muted-foreground hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+            >
+              Hủy
+            </button>
           </div>
         </div>
       )}
 
       <div className="relative mb-4">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <input placeholder="Tìm sản phẩm..." value={search} onChange={(e) => setSearch(e.target.value)}
-          className="w-full rounded-lg border border-border bg-card pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+        <input
+          placeholder="Tìm sản phẩm..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full rounded-lg border border-border bg-card pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+        />
       </div>
 
       <div className="rounded-xl border border-border overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-card border-b border-border">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Sản phẩm</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase hidden md:table-cell">Thương hiệu</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Giá</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase hidden md:table-cell">Ảnh</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase hidden md:table-cell">Danh mục</th>
-              <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground uppercase">Hành động</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">
+                Sản phẩm
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase hidden md:table-cell">
+                Thương hiệu
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">
+                Giá
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase hidden md:table-cell">
+                Ảnh
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase hidden md:table-cell">
+                Danh mục
+              </th>
+              <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground uppercase">
+                Hành động
+              </th>
             </tr>
           </thead>
           <tbody>
             {isFetching ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                <td
+                  colSpan={6}
+                  className="px-4 py-8 text-center text-muted-foreground"
+                >
                   Đang tải...
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                <td
+                  colSpan={6}
+                  className="px-4 py-8 text-center text-muted-foreground"
+                >
                   Không có sản phẩm.
                 </td>
               </tr>
             ) : (
               filtered.map((product) => (
-              <tr key={product._id} className="border-b border-border hover:bg-secondary/50 transition-colors">
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <img src={product.images?.[0]} alt="" className="h-10 w-10 rounded-lg object-cover" />
-                    <span className="font-medium">{product.name}</span>
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{product.brand_id?.name || "-"}</td>
-                <td className="px-4 py-3 font-medium text-primary">{formatPrice(product.price)}</td>
-                <td className="px-4 py-3 hidden md:table-cell">
-                  <div className="flex -space-x-2">
-                    {(product.images || []).slice(0, 3).map((img, i) => (
-                      <img key={i} src={img} alt="" className="h-8 w-8 rounded-full object-cover border-2 border-card" />
-                    ))}
-                    {(product.images || []).length > 3 && (
-                      <span className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-[10px] font-semibold text-muted-foreground border-2 border-card">
-                        +{(product.images || []).length - 3}
-                      </span>
-                    )}
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{product.category_id?.name || "-"}</td>
-                <td className="px-4 py-3">
-                  <div className="flex justify-end gap-2">
-                    <button onClick={() => handleEdit(product)} className="p-2 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground"><Pencil className="h-4 w-4" /></button>
-                    <button onClick={() => handleDelete(product._id)} className="p-2 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
-                  </div>
-                </td>
-              </tr>
-            ))
+                <tr
+                  key={product._id}
+                  className="border-b border-border hover:bg-secondary/50 transition-colors"
+                >
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={product.images?.[0]}
+                        alt=""
+                        className="h-10 w-10 rounded-lg object-cover"
+                      />
+                      <span className="font-medium">{product.name}</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">
+                    {product.brand_id?.name || "-"}
+                  </td>
+                  <td className="px-4 py-3 font-medium text-primary">
+                    {formatPrice(product.price)}
+                  </td>
+                  <td className="px-4 py-3 hidden md:table-cell">
+                    <div className="flex -space-x-2">
+                      {(product.images || []).slice(0, 3).map((img, i) => (
+                        <img
+                          key={i}
+                          src={img}
+                          alt=""
+                          className="h-8 w-8 rounded-full object-cover border-2 border-card"
+                        />
+                      ))}
+                      {(product.images || []).length > 3 && (
+                        <span className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-[10px] font-semibold text-muted-foreground border-2 border-card">
+                          +{(product.images || []).length - 3}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">
+                    {product.category_id?.name || "-"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleEdit(product)}
+                        className="p-2 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(product._id)}
+                        className="p-2 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
             )}
           </tbody>
         </table>
