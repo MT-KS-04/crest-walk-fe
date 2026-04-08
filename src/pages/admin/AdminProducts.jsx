@@ -1,32 +1,112 @@
-import { useState, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import AdminLayout from "@/components/AdminLayout";
-import { products, formatPrice } from "@/data/products";
+import { formatPrice } from "@/data/products";
 import { Plus, Pencil, Trash2, Search, ImagePlus, X, Star } from "lucide-react";
 import { toast } from "sonner";
+import adminProductsApi from "@/api/adminProducts.api";
+import adminCategoriesApi from "@/api/adminCategories.api";
+import adminBrandsApi from "@/api/adminBrands.api";
 
 const AdminProducts = () => {
-  const [items, setItems] = useState(products);
+  const [items, setItems] = useState([]);
+  const [isFetching, setIsFetching] = useState(false);
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [form, setForm] = useState({ name: "", brand: "", price: "", category: "", description: "" });
+  const [form, setForm] = useState({
+    name: "",
+    price: "",
+    category_id: "",
+    brand_id: "",
+    description: "",
+    original_price: "",
+  });
   const [images, setImages] = useState([]);
   const [thumbIndex, setThumbIndex] = useState(0);
   const fileInputRef = useRef(null);
 
-  const filtered = items.filter(
-    (p) => p.name.toLowerCase().includes(search.toLowerCase()) || p.brand.toLowerCase().includes(search.toLowerCase())
-  );
+  const [categories, setCategories] = useState([]);
+  const [brands, setBrands] = useState([]);
 
-  const handleDelete = (id) => {
-    setItems((prev) => prev.filter((p) => p.id !== id));
-    toast.success("Đã xóa sản phẩm!");
+  const fetchProducts = async () => {
+    setIsFetching(true);
+    try {
+      const data = await adminProductsApi.list({ page: 1, limit: 200 });
+      setItems(Array.isArray(data?.products) ? data.products : []);
+    } catch (error) {
+      const message =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        "Không tải được danh sách sản phẩm.";
+      toast.error(message);
+      setItems([]);
+    } finally {
+      setIsFetching(false);
+    }
+  };
+
+  const fetchLookups = async () => {
+    try {
+      const [catRes, brandRes] = await Promise.all([
+        adminCategoriesApi.list(),
+        adminBrandsApi.list(),
+      ]);
+      setCategories(Array.isArray(catRes?.data) ? catRes.data : []);
+      setBrands(Array.isArray(brandRes?.data) ? brandRes.data : []);
+    } catch {
+      // keep existing; individual page actions will show error if needed
+    }
+  };
+
+  useEffect(() => {
+    fetchProducts();
+    fetchLookups();
+  }, []);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((p) => {
+      const name = (p?.name || "").toLowerCase();
+      const brandName = (p?.brand_id?.name || "").toLowerCase();
+      return name.includes(q) || brandName.includes(q);
+    });
+  }, [items, search]);
+
+  const handleDelete = async (id) => {
+    const ok = confirm("Xóa sản phẩm này?");
+    if (!ok) return;
+    try {
+      await adminProductsApi.remove(id);
+      toast.success("Đã xóa sản phẩm!");
+      await fetchProducts();
+    } catch (error) {
+      const message =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        "Xóa sản phẩm thất bại.";
+      toast.error(message);
+    }
   };
 
   const handleEdit = (product) => {
-    setEditingId(product.id);
-    setForm({ name: product.name, brand: product.brand, price: product.price.toString(), category: product.category, description: product.description });
-    setImages(product.images);
+    setEditingId(product._id);
+    setForm({
+      name: product?.name || "",
+      price: product?.price != null ? String(product.price) : "",
+      original_price:
+        product?.original_price != null ? String(product.original_price) : "",
+      category_id:
+        typeof product?.category_id === "object"
+          ? product?.category_id?._id || ""
+          : product?.category_id || "",
+      brand_id:
+        typeof product?.brand_id === "object"
+          ? product?.brand_id?._id || ""
+          : product?.brand_id || "",
+      description: product?.description || "",
+    });
+    setImages(Array.isArray(product?.images) ? product.images : []);
     setThumbIndex(0);
     setShowForm(true);
   };
@@ -34,7 +114,14 @@ const AdminProducts = () => {
   const handleAddNew = () => {
     setShowForm(true);
     setEditingId(null);
-    setForm({ name: "", brand: "", price: "", category: "", description: "" });
+    setForm({
+      name: "",
+      price: "",
+      original_price: "",
+      category_id: "",
+      brand_id: "",
+      description: "",
+    });
     setImages([]);
     setThumbIndex(0);
   };
@@ -67,8 +154,8 @@ const AdminProducts = () => {
     else if (thumbIndex > index) setThumbIndex((prev) => prev - 1);
   };
 
-  const handleSave = () => {
-    if (!form.name || !form.brand || !form.price) {
+  const handleSave = async () => {
+    if (!form.name || !form.price || !form.category_id || !form.brand_id) {
       toast.error("Vui lòng điền đầy đủ thông tin!");
       return;
     }
@@ -79,23 +166,55 @@ const AdminProducts = () => {
     // Reorder images so thumb is first
     const orderedImages = [images[thumbIndex], ...images.filter((_, i) => i !== thumbIndex)];
 
-    if (editingId) {
-      setItems((prev) => prev.map((p) => p.id === editingId ? { ...p, name: form.name, brand: form.brand, price: Number(form.price), category: form.category, description: form.description, images: orderedImages } : p));
-      toast.success("Đã cập nhật sản phẩm!");
-    } else {
-      const newProduct = {
-        id: Date.now().toString(), name: form.name, brand: form.brand, price: Number(form.price),
-        images: orderedImages,
-        sizes: [39, 40, 41, 42, 43], category: form.category, description: form.description, rating: 0, reviews: 0,
-      };
-      setItems((prev) => [...prev, newProduct]);
-      toast.success("Đã thêm sản phẩm mới!");
+    const basePayload = {
+      name: form.name,
+      price: Number(form.price),
+      category_id: form.category_id,
+      brand_id: form.brand_id,
+      images: orderedImages,
+      description: form.description || "",
+    };
+
+    if (form.original_price) {
+      basePayload.original_price = Number(form.original_price);
     }
-    setShowForm(false);
-    setEditingId(null);
-    setForm({ name: "", brand: "", price: "", category: "", description: "" });
-    setImages([]);
-    setThumbIndex(0);
+
+    try {
+      if (editingId) {
+        await adminProductsApi.update(editingId, basePayload);
+        toast.success("Đã cập nhật sản phẩm!");
+      } else {
+        const defaultSizes = [39, 40, 41, 42, 43].map((s) => ({
+          size: s,
+          quantity: 0,
+        }));
+        await adminProductsApi.create({
+          ...basePayload,
+          sizes: defaultSizes,
+        });
+        toast.success("Đã thêm sản phẩm mới!");
+      }
+
+      setShowForm(false);
+      setEditingId(null);
+      setForm({
+        name: "",
+        price: "",
+        original_price: "",
+        category_id: "",
+        brand_id: "",
+        description: "",
+      });
+      setImages([]);
+      setThumbIndex(0);
+      await fetchProducts();
+    } catch (error) {
+      const message =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        "Lưu sản phẩm thất bại.";
+      toast.error(message);
+    }
   };
 
   const inputClass = "rounded-lg border border-border bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary";
@@ -115,14 +234,23 @@ const AdminProducts = () => {
           <h3 className="font-heading text-sm font-semibold mb-4">{editingId ? "SỬA SẢN PHẨM" : "THÊM SẢN PHẨM MỚI"}</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <input placeholder="Tên sản phẩm" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputClass} />
-            <input placeholder="Thương hiệu" value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} className={inputClass} />
             <input placeholder="Giá (VND)" type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} className={inputClass} />
-            <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className={inputClass}>
+            <input placeholder="Giá gốc (tuỳ chọn)" type="number" value={form.original_price} onChange={(e) => setForm({ ...form, original_price: e.target.value })} className={inputClass} />
+            <select value={form.brand_id} onChange={(e) => setForm({ ...form, brand_id: e.target.value })} className={inputClass}>
+              <option value="">Chọn thương hiệu</option>
+              {brands.map((b) => (
+                <option key={b._id} value={b._id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+            <select value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })} className={inputClass}>
               <option value="">Chọn danh mục</option>
-              <option value="Running">Running</option>
-              <option value="Basketball">Basketball</option>
-              <option value="Lifestyle">Lifestyle</option>
-              <option value="Training">Training</option>
+              {categories.map((c) => (
+                <option key={c._id} value={c._id}>
+                  {c.name}
+                </option>
+              ))}
             </select>
           </div>
           <textarea placeholder="Mô tả sản phẩm" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
@@ -214,37 +342,51 @@ const AdminProducts = () => {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((product) => (
-              <tr key={product.id} className="border-b border-border hover:bg-secondary/50 transition-colors">
+            {isFetching ? (
+              <tr>
+                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                  Đang tải...
+                </td>
+              </tr>
+            ) : filtered.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                  Không có sản phẩm.
+                </td>
+              </tr>
+            ) : (
+              filtered.map((product) => (
+              <tr key={product._id} className="border-b border-border hover:bg-secondary/50 transition-colors">
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-3">
-                    <img src={product.images[0]} alt="" className="h-10 w-10 rounded-lg object-cover" />
+                    <img src={product.images?.[0]} alt="" className="h-10 w-10 rounded-lg object-cover" />
                     <span className="font-medium">{product.name}</span>
                   </div>
                 </td>
-                <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{product.brand}</td>
+                <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{product.brand_id?.name || "-"}</td>
                 <td className="px-4 py-3 font-medium text-primary">{formatPrice(product.price)}</td>
                 <td className="px-4 py-3 hidden md:table-cell">
                   <div className="flex -space-x-2">
-                    {product.images.slice(0, 3).map((img, i) => (
+                    {(product.images || []).slice(0, 3).map((img, i) => (
                       <img key={i} src={img} alt="" className="h-8 w-8 rounded-full object-cover border-2 border-card" />
                     ))}
-                    {product.images.length > 3 && (
+                    {(product.images || []).length > 3 && (
                       <span className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-[10px] font-semibold text-muted-foreground border-2 border-card">
-                        +{product.images.length - 3}
+                        +{(product.images || []).length - 3}
                       </span>
                     )}
                   </div>
                 </td>
-                <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{product.category}</td>
+                <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{product.category_id?.name || "-"}</td>
                 <td className="px-4 py-3">
                   <div className="flex justify-end gap-2">
                     <button onClick={() => handleEdit(product)} className="p-2 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground"><Pencil className="h-4 w-4" /></button>
-                    <button onClick={() => handleDelete(product.id)} className="p-2 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
+                    <button onClick={() => handleDelete(product._id)} className="p-2 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
                   </div>
                 </td>
               </tr>
-            ))}
+            ))
+            )}
           </tbody>
         </table>
       </div>

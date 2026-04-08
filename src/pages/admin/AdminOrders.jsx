@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "@/components/AdminLayout";
-import { mockOrders } from "@/data/adminData";
 import { formatPrice } from "@/data/products";
 import { Eye, Search } from "lucide-react";
 import { toast } from "sonner";
+import adminOrdersApi from "@/api/adminOrders.api";
 
 const statusLabels = {
   pending: "Chờ xử lý", confirmed: "Đã xác nhận", shipping: "Đang giao", delivered: "Đã giao", cancelled: "Đã hủy",
@@ -14,20 +14,56 @@ const statusColors = {
 };
 
 const AdminOrders = () => {
-  const [orders, setOrders] = useState(mockOrders);
+  const [orders, setOrders] = useState([]);
+  const [isFetching, setIsFetching] = useState(false);
   const [filterStatus, setFilterStatus] = useState("");
   const [search, setSearch] = useState("");
   const [selectedOrder, setSelectedOrder] = useState(null);
 
-  const filtered = orders.filter((o) => {
-    if (filterStatus && o.status !== filterStatus) return false;
-    if (search && !o.id.toLowerCase().includes(search.toLowerCase()) && !o.customerName.toLowerCase().includes(search.toLowerCase())) return false;
-    return true;
-  });
+  const fetchOrders = async () => {
+    setIsFetching(true);
+    try {
+      const data = await adminOrdersApi.list({ page: 1, limit: 200 });
+      setOrders(Array.isArray(data?.orders) ? data.orders : []);
+    } catch (error) {
+      const message =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        "Không tải được danh sách đơn hàng.";
+      toast.error(message);
+      setOrders([]);
+    } finally {
+      setIsFetching(false);
+    }
+  };
 
-  const updateStatus = (id, status) => {
-    setOrders((prev) => prev.map((o) => o.id === id ? { ...o, status } : o));
-    toast.success(`Đã cập nhật trạng thái đơn hàng ${id}!`);
+  useEffect(() => {
+    fetchOrders();
+  }, []);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return orders.filter((o) => {
+      if (filterStatus && o.status !== filterStatus) return false;
+      if (!q) return true;
+      const id = String(o?._id || "").toLowerCase();
+      const customerName = String(o?.user_id?.full_name || "").toLowerCase();
+      return id.includes(q) || customerName.includes(q);
+    });
+  }, [orders, filterStatus, search]);
+
+  const updateStatus = async (id, status) => {
+    try {
+      await adminOrdersApi.updateStatus(id, { status });
+      toast.success(`Đã cập nhật trạng thái đơn hàng!`);
+      await fetchOrders();
+    } catch (error) {
+      const message =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        "Cập nhật trạng thái thất bại.";
+      toast.error(message);
+    }
   };
 
   return (
@@ -55,30 +91,30 @@ const AdminOrders = () => {
       {selectedOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm" onClick={() => setSelectedOrder(null)}>
           <div className="rounded-xl border border-border bg-card p-6 w-full max-w-lg mx-4 animate-slide-up" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-heading text-lg font-semibold mb-4">CHI TIẾT ĐƠN HÀNG {selectedOrder.id}</h3>
+            <h3 className="font-heading text-lg font-semibold mb-4">CHI TIẾT ĐƠN HÀNG {selectedOrder._id}</h3>
             <div className="space-y-3 text-sm">
-              <div className="flex justify-between"><span className="text-muted-foreground">Khách hàng:</span><span>{selectedOrder.customerName}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">SĐT:</span><span>{selectedOrder.customerPhone}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Email:</span><span>{selectedOrder.customerEmail}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Khách hàng:</span><span>{selectedOrder.user_id?.full_name || "-"}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">SĐT:</span><span>{selectedOrder.phone || "-"}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Email:</span><span>{selectedOrder.user_id?.email || "-"}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Địa chỉ:</span><span className="text-right max-w-[200px]">{selectedOrder.address}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Thanh toán:</span><span>{selectedOrder.paymentMethod === "cod" ? "COD" : "Online"}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Thanh toán:</span><span>{selectedOrder.payment_method || "-"}</span></div>
               <div className="border-t border-border pt-3">
                 <p className="text-xs text-muted-foreground uppercase mb-2">Sản phẩm:</p>
-                {selectedOrder.items.map((item, i) => (
+                {(selectedOrder.items || []).map((item, i) => (
                   <div key={i} className="flex justify-between py-1">
-                    <span>{item.productName} (Size {item.size}) x{item.quantity}</span>
+                    <span>{item.product_name} (Size {item.size}) x{item.quantity}</span>
                     <span>{formatPrice(item.price * item.quantity)}</span>
                   </div>
                 ))}
               </div>
               <div className="border-t border-border pt-3 flex justify-between font-semibold">
-                <span>Tổng:</span><span className="text-primary">{formatPrice(selectedOrder.totalAmount)}</span>
+                <span>Tổng:</span><span className="text-primary">{formatPrice(selectedOrder.total_price || 0)}</span>
               </div>
               <div className="pt-3">
                 <p className="text-xs text-muted-foreground uppercase mb-2">Cập nhật trạng thái:</p>
                 <div className="flex flex-wrap gap-2">
                   {(["pending", "confirmed", "shipping", "delivered", "cancelled"]).map((s) => (
-                    <button key={s} onClick={() => { updateStatus(selectedOrder.id, s); setSelectedOrder({ ...selectedOrder, status: s }); }}
+                    <button key={s} onClick={async () => { await updateStatus(selectedOrder._id, s); setSelectedOrder({ ...selectedOrder, status: s }); }}
                       className={`rounded-full px-3 py-1 text-xs font-medium ${selectedOrder.status === s ? statusColors[s] : "border border-border text-muted-foreground hover:text-foreground"}`}>
                       {statusLabels[s]}
                     </button>
@@ -104,20 +140,34 @@ const AdminOrders = () => {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((order) => (
-              <tr key={order.id} className="border-b border-border hover:bg-secondary/50 transition-colors">
-                <td className="px-4 py-3 font-medium">{order.id}</td>
-                <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{order.customerName}</td>
-                <td className="px-4 py-3 font-medium text-primary">{formatPrice(order.totalAmount)}</td>
+            {isFetching ? (
+              <tr>
+                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                  Đang tải...
+                </td>
+              </tr>
+            ) : filtered.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                  Không có đơn hàng.
+                </td>
+              </tr>
+            ) : (
+              filtered.map((order) => (
+              <tr key={order._id} className="border-b border-border hover:bg-secondary/50 transition-colors">
+                <td className="px-4 py-3 font-medium">{order._id}</td>
+                <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{order.user_id?.full_name || "-"}</td>
+                <td className="px-4 py-3 font-medium text-primary">{formatPrice(order.total_price || 0)}</td>
                 <td className="px-4 py-3">
                   <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${statusColors[order.status]}`}>{statusLabels[order.status]}</span>
                 </td>
-                <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{order.createdAt}</td>
+                <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{order.createdAt ? new Date(order.createdAt).toLocaleString("vi-VN") : "-"}</td>
                 <td className="px-4 py-3 text-right">
                   <button onClick={() => setSelectedOrder(order)} className="p-2 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground"><Eye className="h-4 w-4" /></button>
                 </td>
               </tr>
-            ))}
+            ))
+            )}
           </tbody>
         </table>
       </div>

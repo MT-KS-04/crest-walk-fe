@@ -1,28 +1,94 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "@/components/AdminLayout";
-import { mockCategories } from "@/data/adminData";
 import { Plus, Pencil, Trash2, Search } from "lucide-react";
 import { toast } from "sonner";
+import adminCategoriesApi from "@/api/adminCategories.api";
 
 const AdminCategories = () => {
-  const [items, setItems] = useState(mockCategories);
+  const [items, setItems] = useState([]);
+  const [isFetching, setIsFetching] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ name: "", slug: "" });
   const [search, setSearch] = useState("");
 
-  const filtered = items.filter((c) => !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.slug.toLowerCase().includes(search.toLowerCase()));
-
-  const handleSave = () => {
-    if (!form.name) { toast.error("Vui lòng nhập tên danh mục!"); return; }
-    if (editingId) {
-      setItems((prev) => prev.map((c) => c.id === editingId ? { ...c, name: form.name, slug: form.slug || form.name.toLowerCase() } : c));
-      toast.success("Đã cập nhật danh mục!");
-    } else {
-      setItems((prev) => [...prev, { id: Date.now().toString(), name: form.name, slug: form.slug || form.name.toLowerCase(), productCount: 0 }]);
-      toast.success("Đã thêm danh mục!");
+  const fetchCategories = async () => {
+    setIsFetching(true);
+    try {
+      const data = await adminCategoriesApi.list();
+      setItems(Array.isArray(data?.data) ? data.data : []);
+    } catch (error) {
+      const message =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        "Không tải được danh mục.";
+      toast.error(message);
+      setItems([]);
+    } finally {
+      setIsFetching(false);
     }
-    setShowForm(false); setEditingId(null); setForm({ name: "", slug: "" });
+  };
+
+  useEffect(() => {
+    fetchCategories();
+  }, []);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((c) => {
+      const name = (c?.name || "").toLowerCase();
+      const slug = (c?.slug || "").toLowerCase();
+      return name.includes(q) || slug.includes(q);
+    });
+  }, [items, search]);
+
+  const handleSave = async () => {
+    if (!form.name) {
+      toast.error("Vui lòng nhập tên danh mục!");
+      return;
+    }
+
+    const payload = {
+      name: form.name,
+    };
+    if (form.slug) payload.slug = form.slug;
+
+    try {
+      if (editingId) {
+        await adminCategoriesApi.update(editingId, payload);
+        toast.success("Đã cập nhật danh mục!");
+      } else {
+        await adminCategoriesApi.create(payload);
+        toast.success("Đã thêm danh mục!");
+      }
+      setShowForm(false);
+      setEditingId(null);
+      setForm({ name: "", slug: "" });
+      await fetchCategories();
+    } catch (error) {
+      const message =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        "Lưu danh mục thất bại.";
+      toast.error(message);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    const ok = confirm("Xóa danh mục này?");
+    if (!ok) return;
+    try {
+      await adminCategoriesApi.remove(id);
+      toast.success("Đã xóa!");
+      await fetchCategories();
+    } catch (error) {
+      const message =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        "Xóa danh mục thất bại.";
+      toast.error(message);
+    }
   };
 
   return (
@@ -60,21 +126,30 @@ const AdminCategories = () => {
       <p className="text-xs text-muted-foreground mb-4">{filtered.length} danh mục</p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filtered.map((cat) => (
-          <div key={cat.id} className="rounded-xl border border-border bg-card p-5 flex items-center justify-between">
+        {isFetching ? (
+          <p className="text-center text-muted-foreground py-8 col-span-full">
+            Đang tải...
+          </p>
+        ) : filtered.length === 0 ? (
+          <p className="text-center text-muted-foreground py-8 col-span-full">
+            Không tìm thấy danh mục.
+          </p>
+        ) : (
+          filtered.map((cat) => (
+          <div key={cat._id} className="rounded-xl border border-border bg-card p-5 flex items-center justify-between">
             <div>
               <h3 className="font-heading font-semibold">{cat.name}</h3>
-              <p className="text-xs text-muted-foreground mt-1">{cat.productCount} sản phẩm · /{cat.slug}</p>
+              <p className="text-xs text-muted-foreground mt-1">/{cat.slug}</p>
             </div>
             <div className="flex gap-1">
-              <button onClick={() => { setEditingId(cat.id); setForm({ name: cat.name, slug: cat.slug }); setShowForm(true); }}
+              <button onClick={() => { setEditingId(cat._id); setForm({ name: cat.name, slug: cat.slug }); setShowForm(true); }}
                 className="p-2 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground"><Pencil className="h-4 w-4" /></button>
-              <button onClick={() => { setItems((prev) => prev.filter((c) => c.id !== cat.id)); toast.success("Đã xóa!"); }}
+              <button onClick={() => handleDelete(cat._id)}
                 className="p-2 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
             </div>
           </div>
-        ))}
-        {filtered.length === 0 && <p className="text-center text-muted-foreground py-8 col-span-full">Không tìm thấy danh mục.</p>}
+        ))
+        )}
       </div>
     </AdminLayout>
   );
