@@ -13,6 +13,10 @@ const authApi = {
     return axiosClient.post("/auth/refresh-token");
   },
 
+  getMe: () => {
+    return axiosClient.get("/auth/me");
+  },
+
   logout: () => {
     return axiosClient.post("/auth/logout");
   },
