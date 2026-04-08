@@ -159,7 +159,7 @@ const OrderTracking = () => {
                   {statusLabel[order.status] || order.status}
                 </span>
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                 <div>
                   <p className="text-muted-foreground text-xs uppercase">Ngày đặt</p>
                   <p className="font-medium">{format(new Date(order.createdAt), "dd/MM/yyyy HH:mm")}</p>
@@ -168,16 +168,6 @@ const OrderTracking = () => {
                   <p className="text-muted-foreground text-xs uppercase">Thanh toán</p>
                   <p className="font-medium flex items-center gap-1.5 whitespace-nowrap">
                     <CreditCard className="w-4 h-4 text-primary" /> {order.payment_method === "COD" ? "Thanh toán lúc nhận (COD)" : "Chuyển khoản (Online)"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground text-xs uppercase">Trạng thái phí</p>
-                  <p className="font-medium">
-                     {order.payment_status === "paid" ? (
-                       <span className="text-green-600 font-semibold px-2 py-0.5 bg-green-500/10 rounded-full border border-green-500/20">Đã thanh toán</span>
-                     ) : (
-                       <span className="text-yellow-600 font-semibold px-2 py-0.5 bg-yellow-500/10 rounded-full border border-yellow-500/20">Chưa thanh toán</span>
-                     )}
                   </p>
                 </div>
                 <div>
@@ -237,7 +227,7 @@ const OrderTracking = () => {
               </h2>
               <div className="space-y-3">
                 {order.items?.map((item, i) => {
-                  const imageUrl = item.product_id?.images?.[0] || 'https://via.placeholder.com/150';
+                  const imageUrl = item.product_id?.images?.[0] || item.product_id?.image || 'https://via.placeholder.com/150';
                   return (
                     <div key={i} className="flex items-center gap-3 rounded-lg bg-secondary/30 p-3 border border-border">
                       <img src={imageUrl} alt={item.product_name} className="h-16 w-16 rounded-lg object-cover border border-border/50" />

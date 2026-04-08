@@ -307,7 +307,7 @@ const Profile = () => {
                           
                           <div className="flex flex-col md:items-end">
                             <span className="text-lg font-bold text-primary">{formatPrice(order.total_price)}</span>
-                            <span className="text-[10px] text-muted-foreground uppercase">{order.payment_method} • {order.payment_status === 'paid' ? 'Đã thanh toán' : 'Chưa thanh toán'}</span>
+                            <span className="text-[10px] text-muted-foreground uppercase">{order.payment_method === 'COD' ? 'Thanh toán lúc nhận (COD)' : 'Chuyển khoản (Online)'}</span>
                           </div>
                         </div>
                         
