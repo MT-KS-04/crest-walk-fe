@@ -3,15 +3,15 @@ import axiosClient from "./axiosClient";
 const userOrderApi = {
   checkout: (data) => {
     // data: { address, phone, payment_method }
-    return axiosClient.post("/user/order/checkout", data);
+    return axiosClient.post("/orders/checkout", data);
   },
 
   getOrderHistory: () => {
-    return axiosClient.get("/user/order");
+    return axiosClient.get("/orders");
   },
 
   getOrderDetail: (id) => {
-    return axiosClient.get(`/user/order/${id}`);
+    return axiosClient.get(`/orders/${id}`);
   },
 };
 
