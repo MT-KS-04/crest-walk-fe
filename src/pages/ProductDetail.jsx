@@ -76,13 +76,12 @@ const ProductDetail = () => {
     );
   }
 
-  const handleAddToCart = () => {
+  const handleAddToCart = async () => {
     if (!selectedSize) {
       toast.error("Vui lòng chọn size!");
       return;
     }
-    addToCart(product, selectedSize, quantity);
-    toast.success(`Đã thêm ${product.name} vào giỏ hàng!`);
+    await addToCart(product, selectedSize, quantity);
   };
 
   const brandName = product.brand_id?.name || product.brand;
