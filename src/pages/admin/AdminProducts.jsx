@@ -65,9 +65,16 @@ const AdminProducts = () => {
   const [images, setImages] = useState([]);
   const [thumbIndex, setThumbIndex] = useState(0);
   const fileInputRef = useRef(null);
+  const [sizes, setSizes] = useState([]);
+  const [newSizeValue, setNewSizeValue] = useState("");
 
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
+
+  const defaultSizes = [39, 40, 41, 42, 43].map((s) => ({
+    size: s,
+    quantity: 0,
+  }));
 
   const fetchProducts = async () => {
     setIsFetching(true);
@@ -149,6 +156,17 @@ const AdminProducts = () => {
     });
     setImages(Array.isArray(product?.images) ? product.images : []);
     setThumbIndex(0);
+    const existingSizes = Array.isArray(product?.sizes) ? product.sizes : [];
+    const normalizedSizes =
+      existingSizes.length > 0
+        ? existingSizes
+            .map((s) => ({
+              size: Number(s?.size),
+              quantity: Number(s?.quantity ?? 0),
+            }))
+            .filter((s) => Number.isFinite(s.size) && Number.isFinite(s.quantity))
+        : defaultSizes;
+    setSizes(normalizedSizes);
     setShowForm(true);
   };
 
@@ -165,6 +183,8 @@ const AdminProducts = () => {
     });
     setImages([]);
     setThumbIndex(0);
+    setSizes(defaultSizes);
+    setNewSizeValue("");
   };
 
   const handleFileChange = async (e) => {
@@ -195,6 +215,41 @@ const AdminProducts = () => {
     else if (thumbIndex > index) setThumbIndex((prev) => prev - 1);
   };
 
+  const handleSizeQuantityChange = (index, value) => {
+    const nextQty = Number(value);
+    setSizes((prev) =>
+      prev.map((s, i) =>
+        i === index
+          ? {
+              ...s,
+              quantity: Number.isFinite(nextQty) ? Math.max(0, nextQty) : 0,
+            }
+          : s,
+      ),
+    );
+  };
+
+  const handleRemoveSize = (index) => {
+    setSizes((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleAddSize = () => {
+    const v = Number(newSizeValue);
+    if (!Number.isFinite(v) || v <= 0) {
+      toast.error("Size không hợp lệ.");
+      return;
+    }
+
+    const exists = sizes.some((s) => Number(s.size) === v);
+    if (exists) {
+      toast.error("Size này đã tồn tại.");
+      return;
+    }
+
+    setSizes((prev) => [...prev, { size: v, quantity: 0 }].sort((a, b) => a.size - b.size));
+    setNewSizeValue("");
+  };
+
   const handleSave = async () => {
     if (!form.name || !form.price || !form.category_id || !form.brand_id) {
       toast.error("Vui lòng điền đầy đủ thông tin!");
@@ -218,6 +273,30 @@ const AdminProducts = () => {
       return;
     }
 
+    const cleanedSizes = (Array.isArray(sizes) ? sizes : [])
+      .map((s) => ({
+        size: Number(s?.size),
+        quantity: Number(s?.quantity ?? 0),
+      }))
+      .filter(
+        (s) =>
+          Number.isFinite(s.size) &&
+          s.size > 0 &&
+          Number.isFinite(s.quantity) &&
+          s.quantity >= 0,
+      );
+
+    if (cleanedSizes.length === 0) {
+      toast.error("Vui lòng thêm ít nhất 1 size!");
+      return;
+    }
+
+    const sizeSet = new Set(cleanedSizes.map((s) => s.size));
+    if (sizeSet.size !== cleanedSizes.length) {
+      toast.error("Danh sách size bị trùng. Vui lòng kiểm tra lại.");
+      return;
+    }
+
     const basePayload = {
       name: form.name,
       price: Number(form.price),
@@ -225,6 +304,7 @@ const AdminProducts = () => {
       brand_id: form.brand_id,
       images: orderedImages,
       description: form.description || "",
+      sizes: cleanedSizes.sort((a, b) => a.size - b.size),
     };
 
     if (form.original_price) {
@@ -236,13 +316,9 @@ const AdminProducts = () => {
         await adminProductsApi.update(editingId, basePayload);
         toast.success("Đã cập nhật sản phẩm!");
       } else {
-        const defaultSizes = [39, 40, 41, 42, 43].map((s) => ({
-          size: s,
-          quantity: 0,
-        }));
         await adminProductsApi.create({
           ...basePayload,
-          sizes: defaultSizes,
+          sizes: basePayload.sizes,
         });
         toast.success("Đã thêm sản phẩm mới!");
       }
@@ -259,6 +335,8 @@ const AdminProducts = () => {
       });
       setImages([]);
       setThumbIndex(0);
+      setSizes([]);
+      setNewSizeValue("");
       await fetchProducts();
     } catch (error) {
       const message =
@@ -307,6 +385,53 @@ const AdminProducts = () => {
           </div>
           <textarea placeholder="Mô tả sản phẩm" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
             className={`w-full ${inputClass} mb-4`} rows={3} />
+
+          <div className="mb-4">
+            <label className="block text-sm font-semibold text-foreground mb-2">Size giày</label>
+            <div className="rounded-lg border border-border bg-background p-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {sizes.map((s, index) => (
+                  <div key={`${s.size}-${index}`} className="flex items-center gap-2">
+                    <div className="flex-1 rounded-lg border border-border bg-card px-3 py-2 text-sm">
+                      Size {s.size}
+                    </div>
+                    <input
+                      type="number"
+                      min={0}
+                      value={s.quantity}
+                      onChange={(e) => handleSizeQuantityChange(index, e.target.value)}
+                      className="w-28 rounded-lg border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                      placeholder="SL"
+                    />
+                    <button
+                      onClick={() => handleRemoveSize(index)}
+                      className="p-2 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                      title="Xóa size"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex flex-col md:flex-row items-start md:items-center gap-2 mt-3">
+                <input
+                  type="number"
+                  value={newSizeValue}
+                  onChange={(e) => setNewSizeValue(e.target.value)}
+                  className="w-full md:w-48 rounded-lg border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  placeholder="Nhập size (vd: 44)"
+                />
+                <button
+                  onClick={handleAddSize}
+                  className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted"
+                >
+                  <Plus className="h-4 w-4" />
+                  Thêm size
+                </button>
+              </div>
+            </div>
+          </div>
 
           {/* Image Management */}
           <div className="mb-4">
