@@ -27,3 +27,6 @@ dist-ssr
 api-list.md
 sample
 .env
+
+# Agent
+.cursor

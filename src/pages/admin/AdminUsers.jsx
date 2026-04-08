@@ -1,24 +1,84 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "@/components/AdminLayout";
-import { mockUsers } from "@/data/adminData";
 import { formatPrice } from "@/data/products";
 import { Search, Ban, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
+import adminUsersApi from "@/api/adminUsers.api";
 
 const AdminUsers = () => {
-  const [users, setUsers] = useState(mockUsers);
+  const [users, setUsers] = useState([]);
+  const [isFetching, setIsFetching] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
 
-  const filtered = users.filter((u) => {
-    const matchSearch = !search || u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase()) || u.phone.includes(search);
-    const matchStatus = !statusFilter || u.status === statusFilter;
-    return matchSearch && matchStatus;
-  });
+  const fetchUsers = async () => {
+    setIsFetching(true);
+    try {
+      const data = await adminUsersApi.list({ page: 1, limit: 200 });
+      setUsers(Array.isArray(data?.users) ? data.users : []);
+    } catch (error) {
+      const message =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        "Không tải được danh sách người dùng.";
+      toast.error(message);
+      setUsers([]);
+    } finally {
+      setIsFetching(false);
+    }
+  };
 
-  const toggleStatus = (id) => {
-    setUsers((prev) => prev.map((u) => u.id === id ? { ...u, status: u.status === "active" ? "blocked" : "active" } : u));
-    toast.success("Đã cập nhật trạng thái người dùng!");
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return users.filter((u) => {
+      const matchStatus = !statusFilter || u.status === statusFilter;
+      if (!matchStatus) return false;
+      if (!q) return true;
+      const name = String(u?.full_name || "").toLowerCase();
+      const email = String(u?.email || "").toLowerCase();
+      const phone = String(u?.phone || "");
+      return name.includes(q) || email.includes(q) || phone.includes(search.trim());
+    });
+  }, [users, search, statusFilter]);
+
+  const toggleStatus = async (user) => {
+    const nextStatus = user.status === "active" ? "blocked" : "active";
+    try {
+      await adminUsersApi.updateStatus(user._id, { status: nextStatus });
+      toast.success("Đã cập nhật trạng thái người dùng!");
+      await fetchUsers();
+    } catch (error) {
+      const message =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        "Cập nhật trạng thái thất bại.";
+      toast.error(message);
+    }
+  };
+
+  const handleResetPassword = async (user) => {
+    const newPassword = prompt(
+      `Nhập mật khẩu mới cho ${user.full_name || user.email}:`,
+    );
+    if (!newPassword) return;
+    if (newPassword.length < 6) {
+      toast.error("Mật khẩu phải có ít nhất 6 ký tự");
+      return;
+    }
+    try {
+      await adminUsersApi.resetPassword(user._id, newPassword);
+      toast.success("Đã reset mật khẩu người dùng!");
+    } catch (error) {
+      const message =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        "Reset mật khẩu thất bại.";
+      toast.error(message);
+    }
   };
 
   return (
@@ -54,30 +114,52 @@ const AdminUsers = () => {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((user) => (
-              <tr key={user.id} className="border-b border-border hover:bg-secondary/50 transition-colors">
+            {isFetching ? (
+              <tr>
+                <td colSpan={6} className="text-center text-muted-foreground py-8">
+                  Đang tải...
+                </td>
+              </tr>
+            ) : filtered.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="text-center text-muted-foreground py-8">
+                  Không tìm thấy người dùng.
+                </td>
+              </tr>
+            ) : (
+              filtered.map((user) => (
+              <tr key={user._id} className="border-b border-border hover:bg-secondary/50 transition-colors">
                 <td className="px-4 py-3">
-                  <p className="font-medium">{user.name}</p>
+                  <p className="font-medium">{user.full_name || "-"}</p>
                   <p className="text-xs text-muted-foreground">{user.email}</p>
                 </td>
-                <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{user.phone}</td>
-                <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{user.totalOrders}</td>
-                <td className="px-4 py-3 font-medium text-primary">{formatPrice(user.totalSpent)}</td>
+                <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{user.phone || "-"}</td>
+                <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">-</td>
+                <td className="px-4 py-3 font-medium text-primary">{formatPrice(0)}</td>
                 <td className="px-4 py-3">
                   <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${user.status === "active" ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"}`}>
                     {user.status === "active" ? "Hoạt động" : "Đã chặn"}
                   </span>
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <button onClick={() => toggleStatus(user.id)}
-                    className={`p-2 rounded-lg hover:bg-secondary ${user.status === "active" ? "text-muted-foreground hover:text-red-400" : "text-muted-foreground hover:text-green-400"}`}
-                    title={user.status === "active" ? "Chặn" : "Mở chặn"}>
-                    {user.status === "active" ? <Ban className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
-                  </button>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={() => handleResetPassword(user)}
+                      className="rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary"
+                      title="Reset mật khẩu"
+                    >
+                      Reset PW
+                    </button>
+                    <button onClick={() => toggleStatus(user)}
+                      className={`p-2 rounded-lg hover:bg-secondary ${user.status === "active" ? "text-muted-foreground hover:text-red-400" : "text-muted-foreground hover:text-green-400"}`}
+                      title={user.status === "active" ? "Chặn" : "Mở chặn"}>
+                      {user.status === "active" ? <Ban className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </td>
               </tr>
-            ))}
-            {filtered.length === 0 && <tr><td colSpan={6} className="text-center text-muted-foreground py-8">Không tìm thấy người dùng.</td></tr>}
+            ))
+            )}
           </tbody>
         </table>
       </div>
