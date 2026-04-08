@@ -7,6 +7,47 @@ import adminProductsApi from "@/api/adminProducts.api";
 import adminCategoriesApi from "@/api/adminCategories.api";
 import adminBrandsApi from "@/api/adminBrands.api";
 
+const MAX_IMAGE_DIMENSION = 1280;
+const JPEG_QUALITY = 0.82;
+const MAX_TOTAL_BASE64_CHARS = 16 * 1024 * 1024; // ~16MB text
+
+const readFileAsDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (ev) => resolve(ev.target?.result || "");
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+const loadImage = (src) =>
+  new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = reject;
+    image.src = src;
+  });
+
+const compressImageFile = async (file) => {
+  const dataUrl = await readFileAsDataUrl(file);
+  const image = await loadImage(dataUrl);
+
+  const ratio = Math.min(
+    1,
+    MAX_IMAGE_DIMENSION / Math.max(image.width, image.height),
+  );
+  const width = Math.max(1, Math.round(image.width * ratio));
+  const height = Math.max(1, Math.round(image.height * ratio));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return dataUrl;
+  ctx.drawImage(image, 0, 0, width, height);
+
+  return canvas.toDataURL("image/jpeg", JPEG_QUALITY);
+};
+
 const AdminProducts = () => {
   const [items, setItems] = useState([]);
   const [isFetching, setIsFetching] = useState(false);
@@ -126,18 +167,18 @@ const AdminProducts = () => {
     setThumbIndex(0);
   };
 
-  const handleFileChange = (e) => {
+  const handleFileChange = async (e) => {
     const files = e.target.files;
     if (!files) return;
-    Array.from(files).forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        if (ev.target?.result) {
-          setImages((prev) => [...prev, ev.target.result]);
-        }
-      };
-      reader.readAsDataURL(file);
-    });
+    try {
+      const compressedImages = await Promise.all(
+        Array.from(files).map((file) => compressImageFile(file)),
+      );
+      setImages((prev) => [...prev, ...compressedImages.filter(Boolean)]);
+      toast.success(`Đã thêm ${compressedImages.length} ảnh (đã nén).`);
+    } catch {
+      toast.error("Không thể đọc/nén ảnh. Vui lòng thử ảnh khác.");
+    }
     e.target.value = "";
   };
 
@@ -165,6 +206,17 @@ const AdminProducts = () => {
     }
     // Reorder images so thumb is first
     const orderedImages = [images[thumbIndex], ...images.filter((_, i) => i !== thumbIndex)];
+
+    const estimatedPayloadChars = orderedImages.reduce(
+      (sum, img) => sum + (typeof img === "string" ? img.length : 0),
+      0,
+    );
+    if (estimatedPayloadChars > MAX_TOTAL_BASE64_CHARS) {
+      toast.error(
+        "Tổng dung lượng ảnh vẫn quá lớn. Vui lòng giảm số lượng ảnh hoặc dùng URL ảnh.",
+      );
+      return;
+    }
 
     const basePayload = {
       name: form.name,
@@ -310,6 +362,9 @@ const AdminProducts = () => {
             </div>
             <p className="text-xs text-muted-foreground">
               Hover vào ảnh để chọn <Star className="inline h-3 w-3" /> làm ảnh đại diện (thumbnail) hoặc <X className="inline h-3 w-3" /> xóa. Ảnh đầu tiên được chọn mặc định.
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Ảnh tải lên sẽ tự nén trước khi gửi để tránh lỗi payload quá lớn.
             </p>
           </div>
 
