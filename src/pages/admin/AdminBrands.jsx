@@ -1,36 +1,72 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "@/components/AdminLayout";
-import { brands as productBrands } from "@/data/products";
 import { Plus, Pencil, Trash2, Search } from "lucide-react";
 import { toast } from "sonner";
-
-const initialBrands = productBrands.map((b, i) => ({
-  id: `brand-${i + 1}`,
-  name: b,
-  slug: b.toLowerCase().replace(/\s+/g, "-"),
-  productCount: Math.floor(Math.random() * 10) + 1,
-  description: `Thương hiệu ${b}`,
-}));
+import adminBrandsApi from "@/api/adminBrands.api";
 
 const AdminBrands = () => {
-  const [items, setItems] = useState(initialBrands);
+  const [items, setItems] = useState([]);
+  const [isFetching, setIsFetching] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ name: "", slug: "", description: "" });
   const [search, setSearch] = useState("");
 
-  const filtered = items.filter((b) => !search || b.name.toLowerCase().includes(search.toLowerCase()));
-
-  const handleSave = () => {
-    if (!form.name) { toast.error("Vui lòng nhập tên thương hiệu!"); return; }
-    if (editingId) {
-      setItems((prev) => prev.map((b) => b.id === editingId ? { ...b, name: form.name, slug: form.slug || form.name.toLowerCase().replace(/\s+/g, "-"), description: form.description } : b));
-      toast.success("Đã cập nhật thương hiệu!");
-    } else {
-      setItems((prev) => [...prev, { id: Date.now().toString(), name: form.name, slug: form.slug || form.name.toLowerCase().replace(/\s+/g, "-"), productCount: 0, description: form.description }]);
-      toast.success("Đã thêm thương hiệu!");
+  const fetchBrands = async () => {
+    setIsFetching(true);
+    try {
+      const data = await adminBrandsApi.list();
+      setItems(Array.isArray(data?.data) ? data.data : []);
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Không tải được thương hiệu.");
+      setItems([]);
+    } finally {
+      setIsFetching(false);
     }
-    setShowForm(false); setEditingId(null); setForm({ name: "", slug: "", description: "" });
+  };
+
+  useEffect(() => {
+    fetchBrands();
+  }, []);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((b) => (b?.name || "").toLowerCase().includes(q));
+  }, [items, search]);
+
+  const handleSave = async () => {
+    if (!form.name) { toast.error("Vui lòng nhập tên thương hiệu!"); return; }
+    const payload = {
+      name: form.name,
+      slug: form.slug || undefined,
+      description: form.description || undefined,
+    };
+    try {
+      if (editingId) {
+        await adminBrandsApi.update(editingId, payload);
+        toast.success("Đã cập nhật thương hiệu!");
+      } else {
+        await adminBrandsApi.create(payload);
+        toast.success("Đã thêm thương hiệu!");
+      }
+      await fetchBrands();
+      setShowForm(false); setEditingId(null); setForm({ name: "", slug: "", description: "" });
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Lưu thương hiệu thất bại.");
+    }
+  };
+
+  const handleDelete = async (id) => {
+    const ok = confirm("Xóa thương hiệu này?");
+    if (!ok) return;
+    try {
+      await adminBrandsApi.remove(id);
+      toast.success("Đã xóa!");
+      await fetchBrands();
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Xóa thương hiệu thất bại.");
+    }
   };
 
   return (
@@ -70,22 +106,25 @@ const AdminBrands = () => {
       <p className="text-xs text-muted-foreground mb-4">{filtered.length} thương hiệu</p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filtered.map((brand) => (
-          <div key={brand.id} className="rounded-xl border border-border bg-card p-5">
+        {isFetching ? (
+          <p className="text-center text-muted-foreground py-8 col-span-full">Đang tải...</p>
+        ) : filtered.length === 0 ? (
+          <p className="text-center text-muted-foreground py-8 col-span-full">Không tìm thấy thương hiệu.</p>
+        ) : filtered.map((brand) => (
+          <div key={brand._id} className="rounded-xl border border-border bg-card p-5">
             <div className="flex items-center justify-between mb-2">
               <h3 className="font-heading font-semibold text-lg">{brand.name}</h3>
               <div className="flex gap-1">
-                <button onClick={() => { setEditingId(brand.id); setForm({ name: brand.name, slug: brand.slug, description: brand.description || "" }); setShowForm(true); }}
+                <button onClick={() => { setEditingId(brand._id); setForm({ name: brand.name, slug: brand.slug, description: brand.description || "" }); setShowForm(true); }}
                   className="p-2 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground"><Pencil className="h-4 w-4" /></button>
-                <button onClick={() => { setItems((prev) => prev.filter((b) => b.id !== brand.id)); toast.success("Đã xóa!"); }}
+                <button onClick={() => handleDelete(brand._id)}
                   className="p-2 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">{brand.productCount} sản phẩm · /{brand.slug}</p>
+            <p className="text-xs text-muted-foreground">/{brand.slug}</p>
             {brand.description && <p className="text-xs text-muted-foreground mt-1">{brand.description}</p>}
           </div>
         ))}
-        {filtered.length === 0 && <p className="text-center text-muted-foreground py-8 col-span-full">Không tìm thấy thương hiệu.</p>}
       </div>
     </AdminLayout>
   );

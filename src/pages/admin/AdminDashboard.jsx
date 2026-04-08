@@ -1,17 +1,107 @@
 import AdminLayout from "@/components/AdminLayout";
+import { useEffect, useMemo, useState } from "react";
 import { Package, ShoppingCart, Users, TrendingUp, DollarSign, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { formatPrice } from "@/data/products";
-import { mockOrders, mockUsers, revenueData, bestSelling } from "@/data/adminData";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from "recharts";
-
-const stats = [
-  { label: "Tổng doanh thu", value: formatPrice(215300000), change: "+12.5%", up: true, icon: DollarSign, color: "text-green-400" },
-  { label: "Đơn hàng", value: "156", change: "+8.2%", up: true, icon: ShoppingCart, color: "text-blue-400" },
-  { label: "Sản phẩm", value: "8", change: "+2", up: true, icon: Package, color: "text-primary" },
-  { label: "Người dùng", value: mockUsers.length.toString(), change: "+15%", up: true, icon: Users, color: "text-purple-400" },
-];
+import adminStatsApi from "@/api/adminStats.api";
+import adminOrdersApi from "@/api/adminOrders.api";
+import adminUsersApi from "@/api/adminUsers.api";
+import adminProductsApi from "@/api/adminProducts.api";
 
 const AdminDashboard = () => {
+  const [isLoading, setIsLoading] = useState(false);
+  const [monthRevenueData, setMonthRevenueData] = useState([]);
+  const [dayOrdersData, setDayOrdersData] = useState([]);
+  const [recentOrders, setRecentOrders] = useState([]);
+  const [bestSelling, setBestSelling] = useState([]);
+  const [statsRaw, setStatsRaw] = useState({
+    totalRevenue: 0,
+    totalOrders: 0,
+    totalUsers: 0,
+    totalProducts: 0,
+  });
+
+  const fetchDashboard = async () => {
+    setIsLoading(true);
+    try {
+      const [
+        revenueMonthRes,
+        revenueDayRes,
+        ordersRes,
+        usersRes,
+        productsRes,
+        bestRes,
+      ] = await Promise.all([
+        adminStatsApi.revenue({ interval: "month" }),
+        adminStatsApi.revenue({ interval: "day" }),
+        adminOrdersApi.list({ page: 1, limit: 4 }),
+        adminUsersApi.list({ page: 1, limit: 1 }),
+        adminProductsApi.list({ page: 1, limit: 1 }),
+        adminStatsApi.bestsellers({ limit: 5 }),
+      ]);
+
+      const monthData = revenueMonthRes?.data?.timeline || [];
+      const dayData = revenueDayRes?.data?.timeline || [];
+      const orders = ordersRes?.orders || [];
+      const bestsellers = bestRes?.data || [];
+
+      setMonthRevenueData(monthData);
+      setDayOrdersData(dayData);
+      setRecentOrders(orders);
+      setBestSelling(bestsellers);
+      setStatsRaw({
+        totalRevenue: revenueMonthRes?.data?.summary?.totalRevenue || 0,
+        totalOrders: usersRes ? (ordersRes?.pagination?.total || 0) : 0,
+        totalUsers: usersRes?.pagination?.total || 0,
+        totalProducts: productsRes?.pagination?.total || 0,
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDashboard();
+  }, []);
+
+  const stats = useMemo(
+    () => [
+      {
+        label: "Tổng doanh thu",
+        value: formatPrice(statsRaw.totalRevenue),
+        change: "",
+        up: true,
+        icon: DollarSign,
+        color: "text-green-400",
+      },
+      {
+        label: "Đơn hàng",
+        value: String(statsRaw.totalOrders),
+        change: "",
+        up: true,
+        icon: ShoppingCart,
+        color: "text-blue-400",
+      },
+      {
+        label: "Sản phẩm",
+        value: String(statsRaw.totalProducts),
+        change: "",
+        up: true,
+        icon: Package,
+        color: "text-primary",
+      },
+      {
+        label: "Người dùng",
+        value: String(statsRaw.totalUsers),
+        change: "",
+        up: true,
+        icon: Users,
+        color: "text-purple-400",
+      },
+    ],
+    [statsRaw],
+  );
+
   return (
     <AdminLayout>
       <h1 className="font-heading text-3xl font-bold mb-8">DASHBOARD</h1>
@@ -27,7 +117,7 @@ const AdminDashboard = () => {
             <p className="text-2xl font-bold font-heading">{stat.value}</p>
             <div className="flex items-center gap-1 mt-1">
               {stat.up ? <ArrowUpRight className="h-3 w-3 text-green-400" /> : <ArrowDownRight className="h-3 w-3 text-red-400" />}
-              <span className="text-xs text-green-400">{stat.change}</span>
+              <span className="text-xs text-green-400">{stat.change || "--"}</span>
               <span className="text-xs text-muted-foreground">vs tháng trước</span>
             </div>
           </div>
@@ -39,7 +129,7 @@ const AdminDashboard = () => {
         <div className="rounded-xl border border-border bg-card p-6">
           <h3 className="font-heading text-sm font-semibold mb-4">DOANH THU THEO THÁNG</h3>
           <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={revenueData.monthly}>
+            <BarChart data={monthRevenueData}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(0 0% 16%)" />
               <XAxis dataKey="date" stroke="hsl(0 0% 55%)" fontSize={12} />
               <YAxis stroke="hsl(0 0% 55%)" fontSize={12} tickFormatter={(v) => `${v / 1000000}M`} />
@@ -56,7 +146,7 @@ const AdminDashboard = () => {
         <div className="rounded-xl border border-border bg-card p-6">
           <h3 className="font-heading text-sm font-semibold mb-4">ĐƠN HÀNG THEO NGÀY</h3>
           <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={revenueData.daily}>
+            <LineChart data={dayOrdersData}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(0 0% 16%)" />
               <XAxis dataKey="date" stroke="hsl(0 0% 55%)" fontSize={12} />
               <YAxis stroke="hsl(0 0% 55%)" fontSize={12} />
@@ -74,14 +164,14 @@ const AdminDashboard = () => {
         <div className="rounded-xl border border-border bg-card p-6">
           <h3 className="font-heading text-sm font-semibold mb-4">ĐƠN HÀNG GẦN ĐÂY</h3>
           <div className="space-y-3">
-            {mockOrders.slice(0, 4).map((order) => (
-              <div key={order.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+            {recentOrders.slice(0, 4).map((order) => (
+              <div key={order._id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
                 <div>
-                  <p className="text-sm font-medium">{order.id}</p>
-                  <p className="text-xs text-muted-foreground">{order.customerName}</p>
+                  <p className="text-sm font-medium">{order._id}</p>
+                  <p className="text-xs text-muted-foreground">{order?.user_id?.full_name || "-"}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-medium">{formatPrice(order.totalAmount)}</p>
+                  <p className="text-sm font-medium">{formatPrice(order.total_price || 0)}</p>
                   <span className={`text-[10px] px-2 py-0.5 rounded-full ${
                     order.status === "delivered" ? "bg-green-500/10 text-green-400" :
                     order.status === "shipping" ? "bg-blue-500/10 text-blue-400" :
@@ -105,25 +195,26 @@ const AdminDashboard = () => {
           <h3 className="font-heading text-sm font-semibold mb-4">SẢN PHẨM BÁN CHẠY</h3>
           <div className="space-y-3">
             {bestSelling.slice(0, 5).map((item, i) => (
-              <div key={item.name} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+              <div key={`${item.product_id || item.product_name}-${i}`} className="flex items-center justify-between py-2 border-b border-border last:border-0">
                 <div className="flex items-center gap-3">
                   <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
                     {i + 1}
                   </span>
                   <div>
-                    <p className="text-sm font-medium">{item.name}</p>
-                    <p className="text-xs text-muted-foreground">{item.brand}</p>
+                    <p className="text-sm font-medium">{item.product_name}</p>
+                    <p className="text-xs text-muted-foreground">ID: {item.product_id}</p>
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-medium">{item.sold} đã bán</p>
-                  <p className="text-xs text-muted-foreground">{formatPrice(item.revenue)}</p>
+                  <p className="text-sm font-medium">{item.totalSold} đã bán</p>
+                  <p className="text-xs text-muted-foreground">{formatPrice(item.totalRevenue || 0)}</p>
                 </div>
               </div>
             ))}
           </div>
         </div>
       </div>
+      {isLoading && <p className="text-center text-muted-foreground py-4">Đang tải dữ liệu dashboard...</p>}
     </AdminLayout>
   );
 };
