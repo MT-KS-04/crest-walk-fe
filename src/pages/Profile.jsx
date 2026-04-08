@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import Layout from "@/components/Layout";
 import { useAuth } from "@/contexts/AuthContext";
-import wishlistApi from "@/api/wishlist.api";
 import { formatPrice } from "@/data/products";
 import {
   User, Package, History, Shield, Heart, Camera, Save, Eye, EyeOff,
@@ -20,7 +19,6 @@ const Profile = () => {
   const [email, setEmail] = useState(user?.email || "");
   const [phone, setPhone] = useState(user?.phone || "");
   const [address, setAddress] = useState(user?.address || "");
-  const [wishlistCount, setWishlistCount] = useState(0);
 
   // Settings states
   const [currentPassword, setCurrentPassword] = useState("");
@@ -32,20 +30,6 @@ const Profile = () => {
       setEmail(user.email || "");
       setPhone(user.phone || "");
       setAddress(user.address || "");
-      
-      // Fetch wishlist count
-      const fetchWishlist = async () => {
-        try {
-          const response = await wishlistApi.getWishlist();
-          if (response.success && response.data) {
-            setWishlistCount(response.data.length);
-          }
-        } catch (error) {
-          console.error("Error fetching wishlist:", error);
-        }
-      };
-      
-      fetchWishlist();
     }
   }, [user]);
 
@@ -112,13 +96,6 @@ const Profile = () => {
               Hồ sơ
             </button>
             <button 
-              onClick={() => setSearchParams({ tab: "liked" })}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === "liked" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-            >
-              <Heart className="h-4 w-4" />
-              Đã thích
-            </button>
-            <button 
               onClick={() => setSearchParams({ tab: "settings" })}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === "settings" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
             >
@@ -128,9 +105,9 @@ const Profile = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Main Content (Left) */}
-          <div className="lg:col-span-2 space-y-6">
+        <div className="max-w-4xl mx-auto space-y-6">
+          {/* Main Content */}
+          <div className="space-y-6">
             {activeTab === "profile" && (
               <div className="bg-card rounded-3xl border border-border p-8 shadow-sm">
                 <h2 className="text-2xl font-bold mb-8">Thông tin cá nhân</h2>
@@ -189,14 +166,6 @@ const Profile = () => {
               </div>
             )}
 
-            {activeTab === "liked" && (
-              <div className="bg-card rounded-3xl border border-border p-8 shadow-sm min-h-[400px] flex flex-col items-center justify-center text-center">
-                <Heart className="h-12 w-12 text-muted-foreground/30 mb-4" />
-                <h3 className="text-lg font-bold mb-2">Chưa có sản phẩm nào được yêu thích</h3>
-                <p className="text-muted-foreground text-sm max-w-xs">Các sản phẩm bạn yêu thích sẽ được liệt kê ở đây.</p>
-              </div>
-            )}
-
             {activeTab === "settings" && (
               <div className="bg-card rounded-3xl border border-border p-8 shadow-sm">
                 <h2 className="text-2xl font-bold mb-8 text-[#1a1a1a]">Cài đặt tài khoản</h2>
@@ -244,23 +213,6 @@ const Profile = () => {
                 </div>
               </div>
             )}
-          </div>
-
-          {/* Sidebar (Right) */}
-          <div className="space-y-6">
-            <div className="bg-card rounded-3xl border border-border p-6 shadow-sm">
-              <div className="space-y-5">
-                <div className="flex items-center justify-between p-2">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-pink-50 rounded-lg">
-                      <Heart className="h-4 w-4 text-pink-500" />
-                    </div>
-                    <span className="text-sm font-medium text-muted-foreground">Đã thích</span>
-                  </div>
-                  <span className="px-2.5 py-1 bg-muted rounded-full text-xs font-bold">{wishlistCount}</span>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </div>
