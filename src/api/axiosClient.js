@@ -1,7 +1,7 @@
 import axios from "axios";
 import config from "../config/index.config";
 
-let accessToken = null;
+let accessToken = localStorage.getItem('accessToken') || null;
 
 export const setAccessToken = (token) => {
   accessToken = token;
