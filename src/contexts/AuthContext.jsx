@@ -14,26 +14,12 @@ export const AuthProvider = ({ children }) => {
   });
   const [isLoading, setIsLoading] = useState(false);
 
-  const applyToken = (token, userData) => {
-  const [user, setUser] = useState(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const syncUserFromMe = async () => {
-    try {
-      const meData = await authApi.getMe();
-      return meData?.user || null;
-    } catch {
-      return null;
-    }
-  };
-
-  const applyToken = (token) => {
+  const applyToken = (token, payloadData) => {
     setAccessToken(token || null);
     if (token) {
       axiosClient.defaults.headers.Authorization = `Bearer ${token}`;
       localStorage.setItem('accessToken', token);
-      if (userData) localStorage.setItem('user', JSON.stringify(userData));
+      if (payloadData) localStorage.setItem('user', JSON.stringify(payloadData));
     } else {
       delete axiosClient.defaults.headers.Authorization;
       localStorage.removeItem('accessToken');
@@ -47,23 +33,15 @@ export const AuthProvider = ({ children }) => {
       const data = await authApi.login(email, password);
       const { accessToken, user: userData } = data || {};
 
-      let nextUser = userData || null;
-
       if (accessToken) {
         applyToken(accessToken, userData);
       }
 
-      if (!nextUser && accessToken) {
-        nextUser = await syncUserFromMe();
+      if (userData) {
+        setUser(userData);
       }
 
-      if (nextUser) {
-        setUser(nextUser);
-      } else {
-        setUser(null);
-      }
-
-      setIsAuthenticated(Boolean(accessToken && nextUser));
+      setIsAuthenticated(Boolean(accessToken && userData));
       return { success: true, data };
     } catch (error) {
       setIsAuthenticated(false);
@@ -75,7 +53,6 @@ export const AuthProvider = ({ children }) => {
   };
 
   const handleRegister = async ({ fullName, email, password }) => {
-    // Map từ form sang field backend yêu cầu
     const payload = {
       full_name: fullName,
       email,
@@ -85,26 +62,15 @@ export const AuthProvider = ({ children }) => {
     try {
       setIsLoading(true);
       const data = await authApi.register(payload);
-
-      // Tuỳ backend, có thể trả luôn token + user hoặc chỉ user
       const { accessToken, user: userData } = data || {};
-
-      let nextUser = userData || null;
 
       if (accessToken) {
         applyToken(accessToken, userData);
       }
 
-      if (!nextUser && accessToken) {
-        nextUser = await syncUserFromMe();
-      }
-
-      if (nextUser) {
-        setUser(nextUser);
-        setIsAuthenticated(Boolean(accessToken && nextUser));
-      } else {
-        setUser(null);
-        setIsAuthenticated(Boolean(accessToken));
+      if (userData) {
+        setUser(userData);
+        setIsAuthenticated(true);
       }
 
       return { success: true, data };
@@ -129,44 +95,12 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Khi F5 reload trang: khôi phục token từ localStorage
   useEffect(() => {
     const token = localStorage.getItem('accessToken');
     if (token) {
       applyToken(token, user);
     }
-    const checkSession = async () => {
-      try {
-        setIsLoading(true);
-        const data = await authApi.refreshToken();
-        const { accessToken, user: userData } = data || {};
-
-        let nextUser = userData || null;
-
-        if (accessToken) {
-          applyToken(accessToken);
-        }
-
-        if (!nextUser && accessToken) {
-          nextUser = await syncUserFromMe();
-        }
-
-        if (nextUser) {
-          setUser(nextUser);
-        } else {
-          setUser(null);
-        }
-
-        setIsAuthenticated(Boolean(accessToken && nextUser));
-      } catch {
-        applyToken(null);
-        setUser(null);
-        setIsAuthenticated(false);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    checkSession();
   }, []);
 
   const value = {
