@@ -10,6 +10,7 @@ import {
   X,
   Star,
   Loader2,
+  Minus,
 } from "lucide-react";
 import { toast } from "sonner";
 import adminProductsApi from "@/api/adminProducts.api";
@@ -128,7 +129,18 @@ const appendProductTextFields = (formData, form, { includeSizes }) => {
   if (form.original_price) {
     formData.append("original_price", String(Number(form.original_price)));
   }
-  if (includeSizes) appendDefaultSizes(formData);
+
+  if (includeSizes) {
+    const validSizes = form.sizes.filter((s) => s.size && s.quantity !== "");
+    if (validSizes.length > 0) {
+      validSizes.forEach((row, i) => {
+        formData.append(`sizes[${i}][size]`, String(row.size));
+        formData.append(`sizes[${i}][quantity]`, String(row.quantity));
+      });
+    } else {
+      appendDefaultSizes(formData);
+    }
+  }
 };
 
 const AdminProducts = () => {
@@ -144,6 +156,7 @@ const AdminProducts = () => {
     brand_id: "",
     description: "",
     original_price: "",
+    sizes: [{ size: "", quantity: "" }],
   });
   const [images, setImages] = useState([]);
   const [thumbIndex, setThumbIndex] = useState(0);
@@ -230,6 +243,13 @@ const AdminProducts = () => {
           ? product?.brand_id?._id || ""
           : product?.brand_id || "",
       description: product?.description || "",
+      sizes:
+        Array.isArray(product?.sizes) && product.sizes.length > 0
+          ? product.sizes.map((s) => ({
+              size: String(s.size),
+              quantity: String(s.quantity),
+            }))
+          : [{ size: "", quantity: "" }],
     });
     const urls = Array.isArray(product?.images) ? product.images : [];
     setImages(
@@ -253,6 +273,7 @@ const AdminProducts = () => {
       category_id: "",
       brand_id: "",
       description: "",
+      sizes: [{ size: "", quantity: "" }],
     });
     setImages([]);
     setThumbIndex(0);
@@ -353,6 +374,13 @@ const AdminProducts = () => {
           await adminProductsApi.update(editingId, fd);
           toast.success("Đã cập nhật sản phẩm!");
         } else {
+          const validSizes = form.sizes
+            .filter((s) => s.size && s.quantity !== "")
+            .map((s) => ({
+              size: Number(s.size),
+              quantity: Number(s.quantity),
+            }));
+
           const payload = {
             name: form.name,
             price: Number(form.price),
@@ -360,6 +388,7 @@ const AdminProducts = () => {
             brand_id: form.brand_id,
             description: form.description || "",
             images: imageUrlStrings,
+            sizes: validSizes.length > 0 ? validSizes : undefined,
           };
           if (form.original_price) {
             payload.original_price = Number(form.original_price);
@@ -385,6 +414,7 @@ const AdminProducts = () => {
         category_id: "",
         brand_id: "",
         description: "",
+        sizes: [{ size: "", quantity: "" }],
       });
       setImages([]);
       setThumbIndex(0);
@@ -503,6 +533,74 @@ const AdminProducts = () => {
             className={`w-full ${inputClass} mb-4`}
             rows={3}
           />
+
+          {/* Sizes Management */}
+          <div className="mb-6">
+            <div className="flex items-center justify-between mb-3">
+              <label className="text-sm font-semibold text-foreground">
+                Kích cỡ & Số lượng
+              </label>
+              <button
+                type="button"
+                onClick={() =>
+                  setForm({
+                    ...form,
+                    sizes: [...form.sizes, { size: "", quantity: "" }],
+                  })
+                }
+                className="text-xs font-bold text-primary hover:underline flex items-center gap-1"
+              >
+                <Plus className="h-3 w-3" /> Thêm size
+              </button>
+            </div>
+            <div className="space-y-3">
+              {form.sizes.map((row, index) => (
+                <div key={index} className="flex items-center gap-3">
+                  <input
+                    placeholder="Size (vd: 42)"
+                    type="number"
+                    value={row.size}
+                    onChange={(e) => {
+                      const newSizes = [...form.sizes];
+                      newSizes[index].size = e.target.value;
+                      setForm({ ...form, sizes: newSizes });
+                    }}
+                    className={`${inputClass} flex-1`}
+                  />
+                  <input
+                    placeholder="Số lượng"
+                    type="number"
+                    value={row.quantity}
+                    onChange={(e) => {
+                      const newSizes = [...form.sizes];
+                      newSizes[index].quantity = e.target.value;
+                      setForm({ ...form, sizes: newSizes });
+                    }}
+                    className={`${inputClass} flex-1`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (form.sizes.length === 1) {
+                        setForm({
+                          ...form,
+                          sizes: [{ size: "", quantity: "" }],
+                        });
+                      } else {
+                        setForm({
+                          ...form,
+                          sizes: form.sizes.filter((_, i) => i !== index),
+                        });
+                      }
+                    }}
+                    className="p-2.5 rounded-lg border border-border text-muted-foreground hover:text-destructive hover:border-destructive transition-colors"
+                  >
+                    <Minus className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
 
           {/* Image Management */}
           <div className="mb-4">

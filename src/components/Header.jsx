@@ -16,7 +16,7 @@ const Header = () => {
           to="/"
           className="font-heading text-2xl font-bold tracking-wider text-gradient"
         >
-          SNEAKER<span className="text-foreground">STORE</span>
+          CREST<span className="text-foreground">WALK</span>
         </Link>
 
         <nav className="hidden md:flex items-center gap-8">
@@ -61,22 +61,33 @@ const Header = () => {
           </Link>
           {!isLoading && isAuthenticated && user ? (
             <div className="relative group">
-              <Link to="/profile" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+              <Link
+                to="/profile"
+                className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+              >
                 <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center border border-primary/20 overflow-hidden">
                   {user.avatar ? (
-                    <img src={user.avatar} alt={user.full_name} className="h-full w-full object-cover" />
+                    <img
+                      src={user.avatar}
+                      alt={user.full_name}
+                      className="h-full w-full object-cover"
+                    />
                   ) : (
                     <User className="h-5 w-5 text-primary" />
                   )}
                 </div>
               </Link>
-              
+
               {/* Dropdown menu on hover */}
               <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-background border border-border opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
                 <div className="py-1">
                   <div className="px-4 py-2 border-b border-border">
-                    <p className="text-sm font-medium text-foreground truncate">{user.full_name || "Người dùng"}</p>
-                    <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                    <p className="text-sm font-medium text-foreground truncate">
+                      {user.full_name || "Người dùng"}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {user.email}
+                    </p>
                   </div>
                   <Link
                     to="/profile"
