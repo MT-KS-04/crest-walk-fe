@@ -2,10 +2,12 @@ import { Link } from "react-router-dom";
 import { ShoppingBag, Search, User, Menu, X } from "lucide-react";
 import { useCart } from "@/contexts/CartContext";
 import { useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 
 const Header = () => {
   const { totalItems } = useCart();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { user, isAuthenticated, isLoading, handleLogout } = useAuth();
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-md">
@@ -57,12 +59,28 @@ const Header = () => {
           >
             <Search className="h-5 w-5" />
           </Link>
-          <Link
-            to="/auth"
-            className="text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <User className="h-5 w-5" />
-          </Link>
+          {!isLoading && isAuthenticated && user ? (
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-medium text-foreground max-w-[160px] truncate">
+                {user.full_name || user.email || "Người dùng"}
+              </span>
+              <button
+                onClick={handleLogout}
+                className="text-xs font-medium text-muted-foreground hover:text-destructive transition-colors"
+              >
+                Đăng xuất
+              </button>
+            </div>
+          ) : (
+            !isLoading && (
+              <Link
+                to="/auth"
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <User className="h-5 w-5" />
+              </Link>
+            )
+          )}
           <Link
             to="/cart"
             className="relative text-muted-foreground hover:text-foreground transition-colors"
