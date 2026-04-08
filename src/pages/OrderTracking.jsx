@@ -245,7 +245,17 @@ const OrderTracking = () => {
                         <p className="text-sm font-semibold truncate text-foreground">{item.product_name}</p>
                         <p className="text-xs text-muted-foreground mt-1">Size {item.size} • Số lượng: <span className="text-foreground font-medium">{item.quantity}</span></p>
                       </div>
-                      <span className="text-sm font-semibold text-primary">{formatPrice(item.price * item.quantity)}</span>
+                      <div className="flex flex-col items-end gap-2">
+                        <span className="text-sm font-semibold text-primary">{formatPrice(item.price * item.quantity)}</span>
+                        {order.status === 'delivered' && (
+                          <Link 
+                            to={`/product/${item.product_id?._id || item.product_id}`}
+                            className="text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary px-2 py-1 rounded border border-primary/20 hover:bg-primary hover:text-primary-foreground transition-all"
+                          >
+                            Đánh giá ngay
+                          </Link>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
