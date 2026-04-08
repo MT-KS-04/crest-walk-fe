@@ -1,25 +1,69 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "@/components/AdminLayout";
-import { mockReviews } from "@/data/adminData";
 import { Star, CheckCircle, XCircle, Search } from "lucide-react";
 import { toast } from "sonner";
+import adminReviewsApi from "@/api/adminReviews.api";
 
 const AdminReviews = () => {
-  const [reviews, setReviews] = useState(mockReviews);
+  const [reviews, setReviews] = useState([]);
+  const [isFetching, setIsFetching] = useState(false);
   const [filter, setFilter] = useState("");
   const [search, setSearch] = useState("");
   const [ratingFilter, setRatingFilter] = useState(null);
 
-  const filtered = reviews.filter((r) => {
+  const fetchReviews = async () => {
+    setIsFetching(true);
+    try {
+      const data = await adminReviewsApi.list({
+        status: filter || undefined,
+        page: 1,
+        limit: 200,
+      });
+      setReviews(Array.isArray(data?.data?.reviews) ? data.data.reviews : []);
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Không tải được đánh giá.");
+      setReviews([]);
+    } finally {
+      setIsFetching(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchReviews();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filter]);
+
+  const filtered = useMemo(() => reviews.filter((r) => {
     const matchStatus = !filter || r.status === filter;
-    const matchSearch = !search || r.userName.toLowerCase().includes(search.toLowerCase()) || r.productName.toLowerCase().includes(search.toLowerCase()) || r.comment.toLowerCase().includes(search.toLowerCase());
+    const fullName = `${r?.user_id?.first_name || ""} ${r?.user_id?.last_name || ""}`.trim();
+    const productName = r?.product_id?.name || "";
+    const comment = r?.comment || "";
+    const q = search.toLowerCase();
+    const matchSearch = !search || fullName.toLowerCase().includes(q) || productName.toLowerCase().includes(q) || comment.toLowerCase().includes(q);
     const matchRating = ratingFilter === null || r.rating === ratingFilter;
     return matchStatus && matchSearch && matchRating;
-  });
+  }), [reviews, filter, search, ratingFilter]);
 
-  const updateStatus = (id, status) => {
-    setReviews((prev) => prev.map((r) => r.id === id ? { ...r, status } : r));
-    toast.success(status === "approved" ? "Đã duyệt đánh giá!" : "Đã từ chối đánh giá!");
+  const updateStatus = async (id, status) => {
+    try {
+      await adminReviewsApi.updateStatus(id, status);
+      toast.success(status === "approved" ? "Đã duyệt đánh giá!" : "Đã từ chối đánh giá!");
+      await fetchReviews();
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Cập nhật trạng thái thất bại.");
+    }
+  };
+
+  const handleDelete = async (id) => {
+    const ok = confirm("Xóa đánh giá này?");
+    if (!ok) return;
+    try {
+      await adminReviewsApi.remove(id);
+      toast.success("Đã xóa đánh giá!");
+      await fetchReviews();
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Xóa đánh giá thất bại.");
+    }
   };
 
   return (
@@ -51,13 +95,17 @@ const AdminReviews = () => {
       <p className="text-xs text-muted-foreground mb-4">{filtered.length} đánh giá</p>
 
       <div className="space-y-4">
-        {filtered.map((review) => (
-          <div key={review.id} className="rounded-xl border border-border bg-card p-5">
+        {isFetching ? (
+          <p className="text-center text-muted-foreground py-8">Đang tải...</p>
+        ) : filtered.length === 0 ? (
+          <p className="text-center text-muted-foreground py-8">Không tìm thấy đánh giá nào.</p>
+        ) : filtered.map((review) => (
+          <div key={review._id} className="rounded-xl border border-border bg-card p-5">
             <div className="flex items-start justify-between">
               <div className="flex-1">
                 <div className="flex items-center gap-3 mb-2">
-                  <span className="font-medium text-sm">{review.userName}</span>
-                  <span className="text-xs text-muted-foreground">→ {review.productName}</span>
+                  <span className="font-medium text-sm">{`${review?.user_id?.first_name || ""} ${review?.user_id?.last_name || ""}`.trim() || review?.user_id?.email || "Anonymous"}</span>
+                  <span className="text-xs text-muted-foreground">→ {review?.product_id?.name || "-"}</span>
                   <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
                     review.status === "approved" ? "bg-green-500/10 text-green-400" :
                     review.status === "rejected" ? "bg-red-500/10 text-red-400" :
@@ -72,24 +120,31 @@ const AdminReviews = () => {
                   ))}
                 </div>
                 <p className="text-sm text-muted-foreground">{review.comment}</p>
-                <p className="text-xs text-muted-foreground mt-2">{review.createdAt}</p>
+                <p className="text-xs text-muted-foreground mt-2">
+                  {review.createdAt ? new Date(review.createdAt).toLocaleString("vi-VN") : "-"}
+                </p>
               </div>
-              {review.status === "pending" && (
-                <div className="flex gap-2 ml-4">
-                  <button onClick={() => updateStatus(review.id, "approved")}
+              <div className="flex gap-2 ml-4">
+                {review.status === "pending" && (
+                  <>
+                  <button onClick={() => updateStatus(review._id, "approved")}
                     className="p-2 rounded-lg hover:bg-green-500/10 text-muted-foreground hover:text-green-400" title="Duyệt">
                     <CheckCircle className="h-5 w-5" />
                   </button>
-                  <button onClick={() => updateStatus(review.id, "rejected")}
+                  <button onClick={() => updateStatus(review._id, "rejected")}
                     className="p-2 rounded-lg hover:bg-red-500/10 text-muted-foreground hover:text-red-400" title="Từ chối">
                     <XCircle className="h-5 w-5" />
                   </button>
-                </div>
-              )}
+                  </>
+                )}
+                <button onClick={() => handleDelete(review._id)}
+                  className="p-2 rounded-lg hover:bg-red-500/10 text-muted-foreground hover:text-red-400" title="Xóa">
+                  <XCircle className="h-5 w-5" />
+                </button>
+              </div>
             </div>
           </div>
         ))}
-        {filtered.length === 0 && <p className="text-center text-muted-foreground py-8">Không tìm thấy đánh giá nào.</p>}
       </div>
     </AdminLayout>
   );

@@ -1,14 +1,46 @@
 import AdminLayout from "@/components/AdminLayout";
-import { revenueData } from "@/data/adminData";
 import { formatPrice } from "@/data/products";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from "recharts";
+import adminStatsApi from "@/api/adminStats.api";
 
 const AdminRevenue = () => {
   const [view, setView] = useState("monthly");
-  const data = revenueData[view];
-  const totalRevenue = data.reduce((sum, d) => sum + d.revenue, 0);
-  const totalOrders = data.reduce((sum, d) => sum + d.orders, 0);
+  const [data, setData] = useState([]);
+  const [summary, setSummary] = useState({ totalRevenue: 0, totalOrders: 0 });
+  const [isFetching, setIsFetching] = useState(false);
+
+  const fetchRevenue = async () => {
+    setIsFetching(true);
+    try {
+      const interval = view === "daily" ? "day" : "month";
+      const res = await adminStatsApi.revenue({ interval });
+      const apiData = res?.data || {};
+      setData(Array.isArray(apiData?.timeline) ? apiData.timeline : []);
+      setSummary({
+        totalRevenue: apiData?.summary?.totalRevenue || 0,
+        totalOrders: apiData?.summary?.totalOrders || 0,
+      });
+    } catch {
+      setData([]);
+      setSummary({ totalRevenue: 0, totalOrders: 0 });
+    } finally {
+      setIsFetching(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRevenue();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view]);
+
+  const totalRevenue = summary.totalRevenue || 0;
+  const totalOrders = summary.totalOrders || 0;
+  const normalizedData = useMemo(() => data.map((d) => ({
+    date: d.date,
+    revenue: d.revenue || 0,
+    orders: d.orders || 0,
+  })), [data]);
 
   return (
     <AdminLayout>
@@ -44,7 +76,7 @@ const AdminRevenue = () => {
         <div className="rounded-xl border border-border bg-card p-6">
           <h3 className="font-heading text-sm font-semibold mb-4">DOANH THU</h3>
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={data}>
+            <BarChart data={normalizedData}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(0 0% 16%)" />
               <XAxis dataKey="date" stroke="hsl(0 0% 55%)" fontSize={12} />
               <YAxis stroke="hsl(0 0% 55%)" fontSize={12} tickFormatter={(v) => `${v / 1000000}M`} />
@@ -58,7 +90,7 @@ const AdminRevenue = () => {
         <div className="rounded-xl border border-border bg-card p-6">
           <h3 className="font-heading text-sm font-semibold mb-4">SỐ ĐƠN HÀNG</h3>
           <ResponsiveContainer width="100%" height={300}>
-            <AreaChart data={data}>
+            <AreaChart data={normalizedData}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(0 0% 16%)" />
               <XAxis dataKey="date" stroke="hsl(0 0% 55%)" fontSize={12} />
               <YAxis stroke="hsl(0 0% 55%)" fontSize={12} />
@@ -68,6 +100,7 @@ const AdminRevenue = () => {
           </ResponsiveContainer>
         </div>
       </div>
+      {isFetching && <p className="text-center text-muted-foreground py-4">Đang tải thống kê...</p>}
     </AdminLayout>
   );
 };
