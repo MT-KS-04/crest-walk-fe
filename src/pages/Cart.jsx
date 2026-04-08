@@ -5,7 +5,7 @@ import { useCart } from "@/contexts/CartContext";
 import { formatPrice } from "@/data/products";
 
 const Cart = () => {
-  const { items, removeFromCart, updateQuantity, totalPrice, clearCart } = useCart();
+  const { items, removeFromCart, updateQuantity, totalPrice, clearCart, isLoading } = useCart();
 
   if (items.length === 0) {
     return (
@@ -108,9 +108,11 @@ const Cart = () => {
                 </span>
               </div>
             </div>
-            <button className="w-full rounded-full bg-gradient-fire py-4 text-sm font-semibold text-primary-foreground hover:shadow-glow transition-all">
+            <Link 
+              to="/checkout"
+              className="w-full flex justify-center rounded-full bg-gradient-fire py-4 text-sm font-semibold text-primary-foreground hover:shadow-glow transition-all">
               Đặt hàng
-            </button>
+            </Link>
             <button
               onClick={clearCart}
               className="w-full mt-3 rounded-full border border-border py-3 text-sm text-muted-foreground hover:text-foreground transition-colors"

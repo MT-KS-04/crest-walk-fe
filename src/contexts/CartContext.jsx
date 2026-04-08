@@ -55,7 +55,6 @@ export const CartProvider = ({ children }) => {
       }
     } catch (error) {
       console.error("Lỗi lấy giỏ hàng từ server:", error);
-      // Nếu lỗi 401 hoặc token hết hạn, có thể reset items về trống
       if (error.response?.status === 401) setItems([]);
     } finally {
       setIsLoading(false);
@@ -89,7 +88,7 @@ export const CartProvider = ({ children }) => {
           quantity: Number(quantity)
         });
         toast.success("Đã thêm vào giỏ hàng trực tuyến!");
-        await fetchCart(); // Tải lại để đồng bộ hoàn toàn với server
+        await fetchCart();
       } catch (error) {
         console.error("Lỗi API Thêm vào giỏ hàng:", error);
         toast.error(error.response?.data?.message || "Không thể thêm vào giỏ hàng.");
@@ -120,10 +119,13 @@ export const CartProvider = ({ children }) => {
   const removeFromCart = async (productId, size) => {
     if (isAuthenticated) {
       try {
+        setIsLoading(true);
         await cartApi.remove({ product_id: productId, size: Number(size) });
-        fetchCart();
+        await fetchCart();
       } catch (error) {
         toast.error("Lỗi khi xóa sản phẩm.");
+      } finally {
+        setIsLoading(false);
       }
     } else {
       setItems((prev) => prev.filter((i) => !((i.product._id || i.product.id) === productId && i.size === size)));
@@ -135,10 +137,13 @@ export const CartProvider = ({ children }) => {
 
     if (isAuthenticated) {
       try {
+        setIsLoading(true);
         await cartApi.update({ product_id: productId, size: Number(size), quantity: Number(quantity) });
-        fetchCart();
+        await fetchCart();
       } catch (error) {
         toast.error("Lỗi khi cập nhật số lượng.");
+      } finally {
+        setIsLoading(false);
       }
     } else {
       setItems((prev) =>

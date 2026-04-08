@@ -2,9 +2,12 @@ import { Link } from "react-router-dom";
 import { formatPrice } from "@/data/products";
 import { Heart } from "lucide-react";
 import { motion } from "framer-motion";
+import { useWishlist } from "@/contexts/WishlistContext";
 
 const ProductCard = ({ product, index = 0 }) => {
+  const { toggleWishlist, isInWishlist } = useWishlist();
   const id = product._id || product.id;
+  const inWishlist = isInWishlist(id);
   const brandName = product.brand_id?.name || product.brand;
   const originalPrice = product.original_price || product.originalPrice;
   const image = (Array.isArray(product.images) && product.images.length > 0) ? product.images[0] : "";
@@ -37,10 +40,14 @@ const ProductCard = ({ product, index = 0 }) => {
           )}
 
           <button
-            className="absolute top-3 right-3 rounded-full bg-background/50 p-2 opacity-0 group-hover:opacity-100 transition-all hover:bg-background/80"
-            onClick={(e) => { e.preventDefault(); }}
+            className={`absolute top-3 right-3 rounded-full bg-background/50 p-2 opacity-0 group-hover:opacity-100 transition-all hover:bg-background/80 ${inWishlist ? "opacity-100" : ""}`}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              toggleWishlist(id);
+            }}
           >
-            <Heart className="h-4 w-4 text-foreground" />
+            <Heart className={`h-4 w-4 ${inWishlist ? "fill-primary text-primary" : "text-foreground"}`} />
           </button>
         </div>
 

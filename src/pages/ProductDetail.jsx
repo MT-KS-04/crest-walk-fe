@@ -7,6 +7,7 @@ import ProductCard from "@/components/ProductCard";
 import productsApi from "@/api/products.api";
 import { formatPrice } from "@/data/products";
 import { useCart } from "@/contexts/CartContext";
+import { useWishlist } from "@/contexts/WishlistContext";
 import { toast } from "sonner";
 
 const ProductDetail = () => {
@@ -15,6 +16,7 @@ const ProductDetail = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [relatedProducts, setRelatedProducts] = useState([]);
   const { addToCart } = useCart();
+  const { toggleWishlist, isInWishlist } = useWishlist();
 
   const [selectedSize, setSelectedSize] = useState(null);
   const [quantity, setQuantity] = useState(1);
@@ -214,8 +216,15 @@ const ProductDetail = () => {
               >
                 <ShoppingBag className="h-5 w-5" /> Thêm vào giỏ hàng
               </button>
-              <button className="flex h-14 w-14 items-center justify-center rounded-full border border-border hover:border-primary hover:text-primary transition-colors text-muted-foreground">
-                <Heart className="h-5 w-5" />
+              <button 
+                onClick={() => toggleWishlist(product._id || product.id)}
+                className={`flex h-14 w-14 items-center justify-center rounded-full border border-border transition-colors ${
+                  isInWishlist(product._id || product.id) 
+                    ? "border-primary text-primary fill-primary" 
+                    : "hover:border-primary hover:text-primary text-muted-foreground"
+                }`}
+              >
+                <Heart className={`h-5 w-5 ${isInWishlist(product._id || product.id) ? "fill-primary" : ""}`} />
               </button>
             </div>
           </motion.div>

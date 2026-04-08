@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ShoppingBag, Search, User, Menu, X } from "lucide-react";
+import { ShoppingBag, Search, User, Menu, X, Heart } from "lucide-react";
 import { useCart } from "@/contexts/CartContext";
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -109,6 +109,14 @@ const Header = () => {
               </Link>
             )
           )}
+
+          <Link
+            to="/wishlist"
+            className="text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Heart className="h-5 w-5" />
+          </Link>
+
           <Link
             to="/cart"
             className="relative text-muted-foreground hover:text-foreground transition-colors"
