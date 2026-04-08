@@ -4,16 +4,21 @@ import { Heart } from "lucide-react";
 import { motion } from "framer-motion";
 
 const ProductCard = ({ product, index = 0 }) => {
+  const id = product._id || product.id;
+  const brandName = product.brand_id?.name || product.brand;
+  const originalPrice = product.original_price || product.originalPrice;
+  const image = (Array.isArray(product.images) && product.images.length > 0) ? product.images[0] : "";
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: index * 0.08 }}
     >
-      <Link to={`/product/${product.id}`} className="group block">
+      <Link to={`/product/${id}`} className="group block">
         <div className="relative overflow-hidden rounded-lg bg-card aspect-square">
           <img
-            src={product.images[0]}
+            src={image}
             alt={product.name}
             className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
             loading="lazy"
@@ -25,7 +30,7 @@ const ProductCard = ({ product, index = 0 }) => {
               Mới
             </span>
           )}
-          {product.isSale && (
+          {(product.isSale || originalPrice > product.price) && (
             <span className="absolute top-3 left-3 rounded-full bg-destructive px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-destructive-foreground">
               Sale
             </span>
@@ -40,13 +45,13 @@ const ProductCard = ({ product, index = 0 }) => {
         </div>
 
         <div className="mt-3 space-y-1">
-          <p className="text-xs text-muted-foreground uppercase tracking-wider">{product.brand}</p>
+          <p className="text-xs text-muted-foreground uppercase tracking-wider">{brandName}</p>
           <h3 className="font-heading text-sm font-semibold truncate">{product.name}</h3>
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold text-primary">{formatPrice(product.price)}</span>
-            {product.originalPrice && (
+            {originalPrice && (
               <span className="text-xs text-muted-foreground line-through">
-                {formatPrice(product.originalPrice)}
+                {formatPrice(originalPrice)}
               </span>
             )}
           </div>
