@@ -7,7 +7,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const config = {
-  API_BASE_URL: process.env.API_BASE_URL,
+  VITE_API_URL: process.env.VITE_API_URL,
 };
 
 export default config;

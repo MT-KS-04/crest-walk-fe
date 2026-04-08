@@ -1,7 +1,22 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, Package, FolderOpen, ShoppingCart, Users, Warehouse,
-  Ticket, BarChart3, TrendingUp, MessageSquare, Image, LogOut, ChevronLeft, Menu, Tag } from "lucide-react";
+import {
+  LayoutDashboard,
+  Package,
+  FolderOpen,
+  ShoppingCart,
+  Users,
+  Warehouse,
+  Ticket,
+  BarChart3,
+  TrendingUp,
+  MessageSquare,
+  Image,
+  LogOut,
+  ChevronLeft,
+  Menu,
+  Tag,
+} from "lucide-react";
 
 const navItems = [
   { title: "Dashboard", icon: LayoutDashboard, path: "/admin" },
@@ -25,15 +40,27 @@ const AdminLayout = ({ children }) => {
   return (
     <div className="min-h-screen flex bg-background">
       {/* Sidebar */}
-      <aside className={`sticky top-0 h-screen border-r border-border bg-card flex flex-col transition-all duration-300 ${collapsed ? "w-16" : "w-60"}`}>
+      <aside
+        className={`sticky top-0 h-screen border-r border-border bg-card flex flex-col transition-all duration-300 ${collapsed ? "w-16" : "w-60"}`}
+      >
         <div className="flex items-center justify-between h-16 px-4 border-b border-border">
           {!collapsed && (
-            <Link to="/admin" className="font-heading text-lg font-bold text-gradient">
+            <Link
+              to="/admin"
+              className="font-heading text-lg font-bold text-gradient"
+            >
               ADMIN
             </Link>
           )}
-          <button onClick={() => setCollapsed(!collapsed)} className="text-muted-foreground hover:text-foreground p-1">
-            {collapsed ? <Menu className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
+          <button
+            onClick={() => setCollapsed(!collapsed)}
+            className="text-muted-foreground hover:text-foreground p-1"
+          >
+            {collapsed ? (
+              <Menu className="h-5 w-5" />
+            ) : (
+              <ChevronLeft className="h-5 w-5" />
+            )}
           </button>
         </div>
 
