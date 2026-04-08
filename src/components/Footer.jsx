@@ -6,7 +6,7 @@ const Footer = () => {
       <div className="container py-12">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           <div>
-            <h3 className="font-heading text-xl font-bold text-gradient mb-4">SNEAKERSTORE</h3>
+            <h3 className="font-heading text-xl font-bold text-gradient mb-4">CRESTWALK</h3>
             <p className="text-sm text-muted-foreground leading-relaxed">
               Cửa hàng giày sneaker chính hãng hàng đầu Việt Nam. Cam kết 100% authentic.
             </p>
@@ -34,12 +34,12 @@ const Footer = () => {
             <div className="flex flex-col gap-2 text-sm text-muted-foreground">
               <span>📍 123 Nguyễn Huệ, Q.1, TP.HCM</span>
               <span>📞 0901 234 567</span>
-              <span>✉️ info@sneakerstore.vn</span>
+              <span>✉️ info@crestwalk.vn</span>
             </div>
           </div>
         </div>
         <div className="border-t border-border mt-8 pt-8 text-center text-sm text-muted-foreground">
-          © 2026 SneakerStore. Tất cả quyền được bảo lưu.
+          © 2026 CrestWalk. Tất cả quyền được bảo lưu.
         </div>
       </div>
     </footer>
