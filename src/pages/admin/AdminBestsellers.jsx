@@ -1,17 +1,47 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "@/components/AdminLayout";
-import { bestSelling } from "@/data/adminData";
 import { formatPrice } from "@/data/products";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { Search } from "lucide-react";
+import adminStatsApi from "@/api/adminStats.api";
 
 const AdminBestsellers = () => {
+  const [items, setItems] = useState([]);
+  const [isFetching, setIsFetching] = useState(false);
   const [search, setSearch] = useState("");
   const [brandFilter, setBrandFilter] = useState("");
 
-  const brands = [...new Set(bestSelling.map((b) => b.brand))];
+  const fetchData = async () => {
+    setIsFetching(true);
+    try {
+      const res = await adminStatsApi.bestsellers({ limit: 20 });
+      const list = Array.isArray(res?.data) ? res.data : [];
+      setItems(
+        list.map((x) => ({
+          id: x.product_id,
+          name: x.product_name,
+          brand: "-",
+          sold: x.totalSold || 0,
+          revenue: x.totalRevenue || 0,
+        })),
+      );
+    } catch {
+      setItems([]);
+    } finally {
+      setIsFetching(false);
+    }
+  };
 
-  const filtered = bestSelling.filter((item) => {
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const brands = useMemo(
+    () => [...new Set(items.map((b) => b.brand))].filter((x) => x && x !== "-"),
+    [items],
+  );
+
+  const filtered = items.filter((item) => {
     const matchSearch = !search || item.name.toLowerCase().includes(search.toLowerCase());
     const matchBrand = !brandFilter || item.brand === brandFilter;
     return matchSearch && matchBrand;
@@ -48,6 +78,7 @@ const AdminBestsellers = () => {
       </div>
 
       <p className="text-xs text-muted-foreground mb-4">{filtered.length} sản phẩm</p>
+      {isFetching && <p className="text-xs text-muted-foreground mb-4">Đang tải dữ liệu...</p>}
 
       <div className="rounded-xl border border-border overflow-hidden">
         <table className="w-full text-sm">
